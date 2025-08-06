@@ -1,0 +1,34 @@
+# フォルダを無視（末尾にスラッシュ）
+Logs/
+checkpoints/
+__pycache__/
+
+# 一時ファイル
+*.tmp
+*.log
+*.swp
+
+# Python関連
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+
+Anaconda3-2023.03-1-Linux-x86_64.sh
+datasets_new/
+# Jupyterのチェックポイント
+.ipynb_checkpoints/
+
+# OS依存
+.DS_Store
+Thumbs.db
+
+# モデルファイル
+*.pt
+*.pth
+*.onnx
+
+# 出力ディレクトリ
+outputs/
+results/
