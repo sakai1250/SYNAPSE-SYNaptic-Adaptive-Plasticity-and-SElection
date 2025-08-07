@@ -9,17 +9,13 @@ from pytorch_metric_learning import losses
 from Source.helper import get_device
 
 def test(network: Any, data_loader: DataLoader, return_preds=False) -> Any:
-    """
-    SYNAPSE用の新しいtest関数。ネットワークの純粋な分類性能を評価します。
-    """
     network.eval()
-    predictions = []
-    ground_truths = []
+    predictions, ground_truths = [], []
     
     with torch.no_grad():
+        # データローダーのループにtqdmを適用
         for data, target, _ in tqdm(data_loader, desc="Testing", leave=False):
-            data = data.to(get_device())
-            target = target.to(get_device())
+            data, target = data.to(get_device()), target.to(get_device())
             
             output = network.forward_output(data)
             preds = output.argmax(dim=1)
@@ -39,16 +35,17 @@ def test(network: Any, data_loader: DataLoader, return_preds=False) -> Any:
         return accuracy
 
 def phase_training_scl(network: Any, phase_epochs: int, optimizer: Any, train_loader: DataLoader, args: Namespace) -> Any:
-    """
-    Supervised Contrastive Loss を使ってネットワークを訓練します。
-    """
     print("Supervised Contrastive Loss を用いた訓練を開始します。")
     loss_func = losses.SupConLoss(temperature=0.07)
 
-    for epoch in range(phase_epochs):
+    # エポックごとの外側ループにtqdmを適用
+    for epoch in tqdm(range(phase_epochs), desc=f"Training Epochs", leave=False):
         network.train()
         total_loss = 0
-        for data, target, _ in train_loader:
+        
+        # バッチごとの内側ループにもtqdmを適用
+        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{phase_epochs}", leave=False)
+        for data, target, _ in progress_bar:
             data, target = data.to(get_device()), target.to(get_device())
             optimizer.zero_grad()
 
@@ -60,12 +57,16 @@ def phase_training_scl(network: Any, phase_epochs: int, optimizer: Any, train_lo
             batch_loss.backward()
 
             if hasattr(network, 'freeze_masks') and network.freeze_masks:
-                network.reset_frozen_gradients()
+                if hasattr(network, 'reset_frozen_gradients'):
+                    network.reset_frozen_gradients()
 
             optimizer.step()
             total_loss += batch_loss.item()
+            
+            # プログレスバーに現在のロスを表示
+            progress_bar.set_postfix({'loss': f'{batch_loss.item():.4f}'})
 
         avg_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch+1}/{phase_epochs}, Average SCL Loss: {avg_loss:.4f}")
+        print(f"Epoch {epoch+1}/{phase_epochs} Completed, Average SCL Loss: {avg_loss:.4f}")
 
     return network

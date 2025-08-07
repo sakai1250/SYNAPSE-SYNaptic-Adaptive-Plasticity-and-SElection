@@ -12,6 +12,7 @@ from Source.synapse_operations import (
     initialize_strategically, integrate_neurons, replenish_immature_pool
 )
 import os
+from tqdm import tqdm
 
 class Learner():
     def __init__(self, args: Namespace, network: Any, scenario: GenericCLScenario,
@@ -32,12 +33,12 @@ class Learner():
     def end_episode(self, train_episode: TCLExperience, episode_index: int):
         print("****** Ending Episode ****** ")
         self.similarity_analyzer.update_prototypes(self.network, train_episode, episode_index)
-        # エピソード全体の評価とログ記録
         log_end_of_episode(self.args, self.network, self.original_scenario, episode_index, self.log_dirpath)
 
     def learn_episode(self, train_episode: TCLExperience, val_episode: TCLExperience, test_episode: TCLExperience, episode_index: int):
         train_loader, val_loader, test_loader = get_data_loaders(self.args, train_episode, val_episode, test_episode)
         
+        # === Step 1 & 2: 分析と戦略決定 (エピソードの最初に1回だけ実行) ===
         similarity_score = self.similarity_analyzer.calculate_similarity_score(self.network, train_loader)
         newly_added_neurons = {}
         if similarity_score > 0.8:
@@ -55,21 +56,30 @@ class Learner():
             self.network = add_new_neuron(self.network, layer_idx_output, num_new_classes)
             newly_added_neurons[layer_idx_output] = self.network.transitional_neurons[layer_idx_output]
 
+        # === Step 3: 戦略的初期化 (エピソードの最初に1回だけ実行) ===
         if newly_added_neurons:
             self.network = initialize_strategically(self.network, newly_added_neurons)
+        
+        # === Step 4 (前半): 訓練と中間評価 (フェーズごとに繰り返し) ===
+        for phase_index in range(1, self.args.max_phases + 1):
+            print(f"\n--- Starting Phase {phase_index}/{self.args.max_phases} ---")
+            optimizer = self.optim_obj(self.network.parameters(), lr=self.args.learning_rate)
+            self.network = phase_training_scl(self.network, self.args.phase_epochs, optimizer, train_loader, self.args)
             
-        optimizer = self.optim_obj(self.network.parameters(), lr=self.args.learning_rate)
-        self.network = phase_training_scl(self.network, self.args.phase_epochs, optimizer, train_loader, self.args)
+            # 各フェーズ終了直後にログを記録
+            log_end_of_phase(self.args, self.network, episode_index, phase_index, test_loader, self.log_dirpath)
+
+        # === Step 4 (後半): 成熟化 (全フェーズ完了後に1回だけ実行) ===
         self.network = mature_transitional_neurons(self.network)
         self.network = update_freeze_masks_synapse(self.network)
-        
-        # 学習フェーズ終了直後にログを記録
-        log_end_of_phase(self.args, self.network, episode_index, 1, test_loader, self.log_dirpath)
 
     def learn_all_episodes(self):
-        for episode_index, (train_task, val_task, test_task) in enumerate(zip(
-                self.original_scenario.train_stream, self.original_scenario.val_stream, self.original_scenario.test_stream), 1):
-            
+        ep_bar = tqdm(enumerate(zip(
+            self.original_scenario.train_stream, self.original_scenario.val_stream, self.original_scenario.test_stream
+        ), 1), total=len(self.original_scenario.train_stream), desc="Episodes")
+
+        for episode_index, (train_task, val_task, test_task) in ep_bar:
+            ep_bar.set_description(f"Episode {episode_index}")
             self.start_episode(train_task, episode_index)
             self.learn_episode(train_task, val_task, test_task, episode_index)
             self.end_episode(train_task, episode_index)

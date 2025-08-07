@@ -8,16 +8,17 @@ from Source.train_eval import test
 from Source.helper import get_data_loaders
 from Source.resnet18 import ResNet18
 from torchsummary import summary
+from tqdm import tqdm
 
 def calculate_accuracy(preds, gts):
     return np.mean(np.array(preds) == np.array(gts))
 
-def acc_prev_tasks(args: Namespace, network: Any, task_index: int, scenario: GenericCLScenario) -> List:
-    """ SYNAPSE用に修正された、過去タスクの精度を計算する関数 """
+def acc_prev_tasks(args: Namespace, network: Any, task_index: int, scenario: GenericCLScenario) -> List[Tuple[str, float]]:
     all_accuracies = []
-    for episode_id, test_task in enumerate(scenario.test_stream[:task_index], 1):
+    # 過去タスクの評価ループにtqdmを適用
+    for test_task in tqdm(scenario.test_stream[:task_index], desc="Evaluating Past Tasks", leave=False):
         task_classes = str(test_task.classes_in_this_experience)
-        _, _, test_loader = get_data_loaders(args, test_task, test_task, test_task) # train/valはダミー
+        _, _, test_loader = get_data_loaders(args, test_task, test_task, test_task)
         
         test_acc = test(network, test_loader)
         all_accuracies.append((task_classes, test_acc))
@@ -39,7 +40,8 @@ def log_end_of_episode(args: Namespace, network: Any, scenario: GenericCLScenari
             writer.writerow([task_classes, f"{test_acc:.4f}"])
 
 def log_end_of_phase(args: Namespace, network: Any, episode_index: int, phase_index: int,
-                     train_loader: Any, val_loader: Any, test_loader: Any, dirpath: str):
+                     test_loader: Any, dirpath: str):
+    """ SYNAPSE用に、引数をシンプルにしたログ関数 """
     dirpath_phase = os.path.join(dirpath, f"Episode_{episode_index}", f"Phase_{phase_index}")
     os.makedirs(dirpath_phase, exist_ok=True)
     
@@ -49,6 +51,8 @@ def log_end_of_phase(args: Namespace, network: Any, episode_index: int, phase_in
         writer = write_units(writer, network)
         test_accuracy = test(network, test_loader)
         writer.writerow(["Test Accuracy", f"{test_accuracy:.4f}"])
+        print(f"Episode-{episode_index}, Phase-{phase_index} Test Accuracy: {test_accuracy:.4f}")
+
 
 def log_end_of_sequence(args: Namespace, network: Any, scenario: GenericCLScenario, dirpath: str):
     print("Logging end of sequence summary...")
