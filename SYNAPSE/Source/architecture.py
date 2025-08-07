@@ -11,7 +11,6 @@ def get_backbone(args: Namespace, input_size: int, output_size: int) -> nn.Modul
     if args.model == "VGG11_SLIM":
         return VGG11_SLIM(args, input_size, output_size)
     elif args.model == "ResNet18":
-        # ResNet18も同様にクリーンアップが必要です
         return ResNet18(args, input_size, output_size)
     else:
         raise Exception(f"Model {args.model} is not defined!")

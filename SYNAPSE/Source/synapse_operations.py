@@ -89,30 +89,32 @@ def mature_transitional_neurons(network: Any) -> Any:
 def update_freeze_masks_synapse(network: Any) -> Any:
     """
     SYNAPSEの仕様に基づき、Matureニューロンの重みを凍結（保護）するためのマスクを更新します。
-    """    
+    """
     freeze_masks = []
-    
+
     # architecture.pyで定義した、順序が保証された層のリストを参照
     for i, module in enumerate(network.ranked_modules):
         # unit_ranks[0]は入力層なので、i+1でインデックスを合わせる
         layer_idx_in_ranks = i + 1
-        mature_neuron_indices = network.mature_neurons[layer_idx_in_ranks]
+        mature_neuron_indices = np.array(network.mature_neurons[layer_idx_in_ranks])
 
         weight_mask = torch.zeros_like(module.weight.data, dtype=torch.bool)
         bias_mask = torch.zeros_like(module.bias.data, dtype=torch.bool)
 
-        if mature_neuron_indices:
+        if mature_neuron_indices.size > 0:
             if module.weight.data.dim() == 4: # 畳み込み層
                 weight_mask[mature_neuron_indices, :, :, :] = True
             else: # 全結合層
-                weight_mask[mature_neuron_indices, :] = True
-            
+                # Use np.ix_ to correctly index the 2D weight matrix
+                ixgrid = np.ix_(mature_neuron_indices, np.arange(module.weight.shape[1]))
+                weight_mask[ixgrid] = True
+
             bias_mask[mature_neuron_indices] = True
-        
+
         freeze_masks.append((weight_mask.to(get_device()), bias_mask.to(get_device())))
-            
+
     network.freeze_masks = freeze_masks
-    
+
     # BatchNorm層の凍結も、より安全な方法に修正
     ranks_by_name = {name: ranks for ranks, name in network.unit_ranks}
     for module in network.modules():

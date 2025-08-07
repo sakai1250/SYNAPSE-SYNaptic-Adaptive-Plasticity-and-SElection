@@ -32,10 +32,10 @@ class Learner():
 
     def end_episode(self, train_episode: TCLExperience, episode_index: int):
         print("****** Ending Episode ****** ")
+        train_loader, val_loader, test_loader = get_data_loaders(self.args, train_episode, val_episode, test_episode, episode_index)
         self.similarity_analyzer.update_prototypes(self.network, train_episode, episode_index)
-        log_end_of_episode(self.args, self.network, self.similarity_analyzer,
-                           self.original_scenario, episode_index, self.log_dirpath)
-
+        log_end_of_phase(self.args, self.network, episode_index, 1,
+                         train_loader, val_loader, test_loader, self.log_dirpath)
     def learn_episode(self, train_episode: TCLExperience, val_episode: TCLExperience, test_episode: TCLExperience, episode_index: int):
         train_loader, val_loader, test_loader = get_data_loaders(self.args, train_episode, val_episode, test_episode)
         
@@ -72,7 +72,7 @@ class Learner():
         self.network = mature_transitional_neurons(self.network)
         self.network = update_freeze_masks_synapse(self.network)
         
-        log_end_of_phase(self.args, self.network, self.similarity_analyzer, episode_index, 1,
+        log_end_of_phase(self.args, self.network, episode_index, 1,
                          train_loader, val_loader, test_loader, self.log_dirpath)
 
     def learn_all_episodes(self):

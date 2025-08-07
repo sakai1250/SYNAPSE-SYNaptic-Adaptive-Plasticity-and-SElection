@@ -127,6 +127,41 @@ class SimilarityAnalyzer():
         print(f"計算された最大類似度スコア: {max_similarity:.4f}")
         return max_similarity
 
+
+    def tree_preds(self, activations) -> List[int]:
+        pos_probs = []
+        for index, model in enumerate(self.context_learners, 1):
+            context_masks = self.context_layers_masks[index]
+            X = self.process_and_stack(context_masks, activations)
+            preds = model.predict_proba(X.cpu().numpy())
+            pos_probs.append(preds[:, 1])
+        pos_probs = np.array(pos_probs).T
+        neg_probs = 1 - pos_probs  # type: ignore
+
+        chain_probs = np.zeros((activations[0].shape[0], len(self.context_learners) + 1))
+        for episode_index in range(len(self.context_learners)):
+            if episode_index == 0:
+                chain_probs[:, 0] = pos_probs[:, 0]
+            else:
+                prev_neg_prob = np.prod(neg_probs[:, :episode_index], axis=1)
+                current_pos_prob = prev_neg_prob * pos_probs[:, episode_index]
+                chain_probs[:, episode_index] = current_pos_prob
+
+        chain_probs[:, -1] = 1.0 - chain_probs.sum(axis=1)
+        return list(chain_probs.argmax(axis=1) + 1)
+
+
+
+    def predict_context(self, activations: List[torch.Tensor], episode_index: int):
+        if episode_index is None:
+            _, activations = reduce_or_flat_convs(activations)
+            preds = self.tree_preds(activations)
+            return [self.task2classes[i] for i in preds], [i for i in preds]
+        else:
+            return ([self.task2classes[episode_index] for _ in range(activations[0].shape[0])],
+                    [episode_index for _ in range(activations[0].shape[0])])
+
+
 def get_n_samples_per_class(dataset, n: int, target_class: int):
     indices = []
     # dataset.datasetから対象クラスのインデックスだけを取得

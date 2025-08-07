@@ -175,40 +175,6 @@ class ContextDetector():
             return ([self.task2classes[episode_index] for _ in range(activations[0].shape[0])],
                     [episode_index for _ in range(activations[0].shape[0])])
 
-    def calculate_similarity_score(self, activations: list[torch.Tensor]) -> tuple[float, int | None]:
-        """
-        新しいデータの活性化ベクトルと、記憶している全クラスの「お手本」との
-        類似度を計算します。
-
-        戻り値:
-            (float): 最も高い類似度スコア (0〜1の範囲)
-            (int | None): 最も似ていたクラスのID (お手本がまだ無い場合はNone)
-        """
-        # まだ比較対象のお手本が一つも無ければ、類似度0を返す
-        if not self.class_prototypes:
-            return 0.0, None
-
-        # 比較しやすいように、入力された活性化ベクトルを整形します
-        _, flattened_activations = reduce_or_flat_convs(activations)
-        current_activation = flattened_activations[-2].mean(dim=0)
-
-        # 保存されているお手本の一覧を取得
-        class_ids = list(self.class_prototypes.keys())
-        prototypes = torch.stack(list(self.class_prototypes.values()))
-        
-        # コサイン類似度を計算して、最も似ているものを探します
-        # ベクトルを正規化してから内積を取ると、コサイン類似度になります
-        cos_sim = F.linear(F.normalize(current_activation.unsqueeze(0)), F.normalize(prototypes))
-        
-        # 最も高い類似度スコアと、それがどのクラスだったかを取得
-        max_sim_val, max_idx = torch.max(cos_sim, dim=1)
-        best_class_id = class_ids[max_idx.item()]
-        
-        # コサイン類似度 (-1〜1) を 0〜1 の範囲に変換して返す
-        score = (max_sim_val.item() + 1) / 2
-        
-        return score, best_class_id
-
 
 def get_n_samples_per_class(dataset, n: int) -> List:  # type: ignore
     indices = {i: [] for i in dataset.classes_in_this_experience}
