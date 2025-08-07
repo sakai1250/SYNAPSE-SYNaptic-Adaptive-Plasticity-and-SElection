@@ -230,15 +230,12 @@ def initialize_masks(network: Any) -> nn.Module:
     print("Initializing weight and bias masks for all sparse layers...")
     for module in network.modules():
         if isinstance(module, (SparseLinear, SparseConv2d, SparseOutput)):
-            # 全ての要素が1のマスクを作成します
             weight_mask = torch.ones_like(module.weight.data)
             if module.bias is not None:
                 bias_mask = torch.ones_like(module.bias.data)
             else:
-                # バイアスがない層のためにダミーのマスクを作成
-                bias_mask = torch.empty(0)
+                bias_mask = torch.empty(0) # バイアスがない層のためのダミー
             
-            # 作成したマスクを層に設定します
             module.set_mask(weight_mask, bias_mask)
             
     network.to(get_device())

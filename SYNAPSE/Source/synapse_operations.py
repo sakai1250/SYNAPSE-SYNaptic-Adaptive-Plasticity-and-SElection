@@ -86,52 +86,35 @@ def mature_transitional_neurons(network: Any) -> Any:
     print("ニューロンの成熟化が完了しました。")
     return network
 
-
 def update_freeze_masks_synapse(network: Any) -> Any:
     """
     SYNAPSEの仕様に基づき、Matureニューロンの重みを凍結（保護）するためのマスクを更新します。
-    """
-    print("Matureニューロンの重みを保護するためのフリーズマスクを更新します。")
-    
-    # 1. unit_ranksから「名札」をキーにした対応表を作成
-    ranks_by_name = {name: ranks for ranks, name in network.unit_ranks}
-    mature_neurons_by_name = {
-        name: list(np.where(ranks >= MATURE_BASE_RANK)[0]) 
-        for name, ranks in ranks_by_name.items()
-    }
-
+    """    
     freeze_masks = []
     
-    # 2. ネットワークの全モジュールを巡回
-    for module in network.modules():
-        if isinstance(module, (SparseLinear, SparseConv2d, SparseOutput)):
-            # モジュールの「名札」を取得
-            layer_name = module.layer_name
+    # architecture.pyで定義した、順序が保証された層のリストを参照
+    for i, module in enumerate(network.ranked_modules):
+        # unit_ranks[0]は入力層なので、i+1でインデックスを合わせる
+        layer_idx_in_ranks = i + 1
+        mature_neuron_indices = network.mature_neurons[layer_idx_in_ranks]
+
+        weight_mask = torch.zeros_like(module.weight.data, dtype=torch.bool)
+        bias_mask = torch.zeros_like(module.bias.data, dtype=torch.bool)
+
+        if mature_neuron_indices:
+            if module.weight.data.dim() == 4: # 畳み込み層
+                weight_mask[mature_neuron_indices, :, :, :] = True
+            else: # 全結合層
+                weight_mask[mature_neuron_indices, :] = True
             
-            # 名札が対応表に無ければスキップ
-            if layer_name not in mature_neurons_by_name:
-                continue
-
-            # 対応表から、この層のMatureニューロンのリストを取得
-            mature_neuron_indices = mature_neurons_by_name[layer_name]
-
-            weight_mask = torch.zeros_like(module.weight.data, dtype=torch.bool)
-            bias_mask = torch.zeros_like(module.bias.data, dtype=torch.bool)
-
-            if mature_neuron_indices:
-                # テンソルの次元数に応じてインデックス指定を切り替える
-                if module.weight.data.dim() == 4: # 畳み込み層
-                    weight_mask[mature_neuron_indices, :, :, :] = True
-                else: # 全結合層
-                    weight_mask[mature_neuron_indices, :] = True
-                
-                bias_mask[mature_neuron_indices] = True
-            
-            freeze_masks.append((weight_mask.to(get_device()), bias_mask.to(get_device())))
+            bias_mask[mature_neuron_indices] = True
+        
+        freeze_masks.append((weight_mask.to(get_device()), bias_mask.to(get_device())))
             
     network.freeze_masks = freeze_masks
     
-    # BatchNorm層の凍結ロジック (こちらもlayer_nameベースでより堅牢に)
+    # BatchNorm層の凍結も、より安全な方法に修正
+    ranks_by_name = {name: ranks for ranks, name in network.unit_ranks}
     for module in network.modules():
         if isinstance(module, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d)):
             if hasattr(module, 'layer_name'):
@@ -143,7 +126,6 @@ def update_freeze_masks_synapse(network: Any) -> Any:
                         module.freeze_units(frozen_units)
 
     return network
-
 
 def get_most_activated_mature_neuron(network: Any, data_loader: DataLoader) -> tuple[int, int] | None:
     """
