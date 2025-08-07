@@ -8,8 +8,6 @@ from Source.nice_operations import increase_unit_ranks, update_freeze_masks, sel
 from Source.nice_operations import drop_young_to_learner, grow_all_to_young
 from Source.log import log_end_of_episode, log_end_of_sequence, log_end_of_phase
 from Source.train_eval import test, phase_training_ce
-from Source.nice_operations import duplicate_neuron, add_new_neuron_from_immature
-from Source.train_eval import train_and_evaluate_phase
 
 from tqdm import tqdm
 import os

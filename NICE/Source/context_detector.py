@@ -48,10 +48,6 @@ class ContextDetector():
 
         self.float_context_representations = dict()
 
-        # ADAN用: 各クラスの「お手本」（平均活性化ベクトル）を保存する場所
-        self.class_prototypes = dict()
-
-
     def train_models(self, current_episode_index: int):
         context_learners = []
         if current_episode_index == 1:
@@ -134,29 +130,6 @@ class ContextDetector():
         self.float_context_representations[episode_index] = episodes_float_context_representations
         self.quantized_context_representations[episode_index] = concat_tensors(episode_quantized_context_representations)
         self.train_models(episode_index)
-
-        # ADAN用: タスク学習後、Matureになったニューロンの活性化を基にお手本を更新する
-        network.eval()
-        with torch.no_grad():
-            classes_in_experience = train_episode.classes_in_this_experience
-            for class_id in classes_in_experience:
-                # データセットから、このクラスのサンプルをいくつか取得します
-                # get_n_samples_per_classはNICEに元からある関数です
-                class_subset = get_n_samples_per_class(train_episode, n=self.args.memo_per_class_context, classes_to_get=[class_id])
-                if not class_subset:
-                    continue
-                
-                samples, _ = class_subset[0]
-                # サンプルをモデルに入力し、各層の活性化ベクトルを取得
-                _, activations = reduce_or_flat_convs(network.get_activations(samples.to(get_device())))
-                
-                # 最終層の一つ手前（penultimate layer）の活性化ベクトルを使います
-                # この層がデータの特徴を最もよく表していると考えられるためです
-                penultimate_activations = activations[-2]
-                
-                # そのクラスの「お手本」として、活性化ベクトルの平均値を保存します
-                if penultimate_activations.numel() > 0:
-                    self.class_prototypes[class_id] = penultimate_activations.mean(dim=0)
 
         network.train()
 

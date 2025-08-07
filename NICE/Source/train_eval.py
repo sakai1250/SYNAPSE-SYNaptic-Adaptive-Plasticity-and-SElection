@@ -65,34 +65,3 @@ def phase_training_ce(network: Any, phase_epochs: int,
             sum(epoch_l2_loss) / len(epoch_l2_loss)))
 
     return network
-
-
-def phase_training_ce(network: Any, phase_epochs: int,
-                      loss: nn.Module, optimizer: ..., train_loader: DataLoader, args: Namespace) -> Any:
-    for epoch in tqdm(range(phase_epochs), desc="Phase Training", unit="epoch", leave=False):
-        network.train()
-        epoch_l2_loss = []
-        epoch_ce_loss = []
-
-        train_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{phase_epochs}", unit="batch", leave=False)
-        for data, target, _ in train_bar:
-            data = data.to(get_device())
-            target = target.to(get_device())
-            optimizer.zero_grad()
-            stream_output = network.forward_output(data)
-            ce_loss = loss(stream_output, target.long())
-            reg_loss = args.weight_decay * network.l2_loss()
-            batch_loss = reg_loss + ce_loss
-
-            epoch_ce_loss.append(ce_loss.item())
-            epoch_l2_loss.append(reg_loss.item())
-
-            batch_loss.backward()
-            if network.freeze_masks:
-                network.reset_frozen_gradients()
-            optimizer.step()
-
-        avg_ce = sum(epoch_ce_loss) / len(epoch_ce_loss)
-        avg_l2 = sum(epoch_l2_loss) / len(epoch_l2_loss)
-        print(f"Epoch [{epoch+1}/{phase_epochs}] - CE Loss: {avg_ce:.4f}, L2 Loss: {avg_l2:.4f}")
-

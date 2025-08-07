@@ -9,6 +9,9 @@ import copy
 from Source.helper import get_device, SparseConv2d, SparseLinear, SparseOutput
 from Source.resnet18 import ResNet18
 
+# SYNAPSE:
+from .synapse_operations import IMMATURE, TRANSITIONAL, MATURE_BASE_RANK
+
 
 def get_backbone(args: Namespace, input_size: int, output_size: int) -> nn.Module:
     if args.model == "CNN_Simple":
@@ -290,6 +293,26 @@ class VGG11_SLIM(CNN_Simple):
         self.current_young_neurons = [[]] + [list(range(param.shape[0])) for param in self.parameters() if len(param.shape) != 1]
         self.current_learner_neurons = [ list(range(0)) for param in self.parameters() if len(param.shape) != 1] + [[]]
 
+        # SYNAPSE: unit_ranksの初期化
+        self.immature_pool_ratio = 0.1 # Immatureニューロンの割合
+
+        unit_ranks_list = [([999]*self.input_size, "input")]
+        for m in self.modules():
+            if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput)):
+                num_units = m.weight.data.shape[0]
+                initial_ranks = np.full(num_units, IMMATURE, dtype=int)
+                unit_ranks_list.append((initial_ranks, m.layer_name))
+
+        self.unit_ranks = [(np.array(unit_types), name) for unit_types, name in unit_ranks_list]
+
+        # SYNAPSE: 状態ごとのニューロンリストを管理する変数を初期化
+        self.immature_neurons = []
+        self.transitional_neurons = []
+        self.mature_neurons = []
+        self.update_neuron_state_lists() # 初期状態を反映
+
+
+
         self.freeze_masks = []
         unit_ranks_list = [([999]*self.input_size, "input")]
         for m in self.modules():
@@ -297,6 +320,41 @@ class VGG11_SLIM(CNN_Simple):
                 unit_ranks_list.append(([0]*m.weight.data.shape[0], m.layer_name))  # type: ignore
         self.unit_ranks = [(np.array(unit_types), name)
                            for unit_types, name in unit_ranks_list]
+
+    # SYNAPSE:
+    def update_neuron_state_lists(self):
+        """unit_ranksに基づいて、各状態のニューロンリストを更新"""
+        self.immature_neurons = [list(np.where(ranks == IMMATURE)[0]) for ranks, _ in self.unit_ranks]
+        self.transitional_neurons = [list(np.where(ranks == TRANSITIONAL)[0]) for ranks, _ in self.unit_ranks]
+        self.mature_neurons = [list(np.where(ranks >= MATURE_BASE_RANK)[0]) for ranks, _ in self.unit_ranks]
+
+    def reset_frozen_gradients(self):
+        """
+        freeze_masksに基づき、凍結対象のニューロンの勾配を0にリセットします。
+        optimizer.step() の直前に呼び出されます。
+        """
+        # freeze_masksが設定されていなければ何もしません
+        if not hasattr(self, 'freeze_masks') or not self.freeze_masks:
+            return
+
+        mask_index = 0
+        for module in self.modules():
+            if isinstance(module, (SparseLinear, SparseConv2d, SparseOutput)):
+                if module.weight.grad is not None:
+                    # マスクがTrueの部分の勾配を0にします
+                    weight_freeze_mask, bias_freeze_mask = self.freeze_masks[mask_index]
+                    module.weight.grad.data[weight_freeze_mask] = 0
+                    if module.bias is not None and module.bias.grad is not None:
+                        module.bias.grad.data[bias_freeze_mask] = 0
+                mask_index += 1
+            
+            # BatchNorm層の勾配凍結
+            if isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d)):
+                if hasattr(module, 'frozen_units') and module.frozen_units is not None and module.affine:
+                    if module.weight.grad is not None:
+                        module.weight.grad.data.masked_fill_(module.frozen_units, 0)
+                    if module.bias.grad is not None:
+                        module.bias.grad.data.masked_fill_(module.frozen_units, 0)
 
 
 class CNN_MNIST(CNN_Simple):
