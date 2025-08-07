@@ -82,22 +82,19 @@ class ResNet18(nn.Module):
         self.output_layer = SparseOutput(int(512 * self.c), output_size, layer_name="output")
 
         # SYNAPSE: unit_ranksの初期化
-       self.immature_pool_ratio = 0.1 # Immatureニューロンの割合を10%に設定
+        self.immature_pool_ratio = 0.1
         self.unit_ranks = [(np.array([999]*self.input_size, dtype=int), "conv_early_0")]
-
-        for num_units, layer_name in self.layers[1:]:
-            initial_ranks = np.full(num_units, IMMATURE, dtype=int)
-            self.unit_ranks.append((initial_ranks, layer_name))
-
-        output_ranks = np.full(output_size, IMMATURE, dtype=int)
-        self.unit_ranks.append((output_ranks, "output"))
-
-        self.immature_neurons = []
-        self.transitional_neurons = []
-        self.mature_neurons = []
-        self.update_neuron_state_lists() # 初期状態を反映
         
+        # `self.layers`はResNet18のカスタム属性で、(ユニット数, レイヤー名)のタプルリスト
+        for num_units, layer_name in self.layers[1:]:
+            self.unit_ranks.append((np.full(num_units, IMMATURE, dtype=int), layer_name))
+        
+        # 出力層
+        self.unit_ranks.append((np.full(output_size, IMMATURE, dtype=int), "output"))
+
+        self.update_neuron_state_lists()
         self.freeze_masks = []
+        self._initialize_weights()        
 
     def get_units_ranks_dict(self):
         return {name: ranks for ranks, name in self.unit_ranks}

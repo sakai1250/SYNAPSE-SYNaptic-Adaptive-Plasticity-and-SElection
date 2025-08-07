@@ -242,119 +242,95 @@ class CNN_Simple(nn.Module):
         return frozen_units
 
 
-class VGG11_SLIM(CNN_Simple):
-
+class VGG11_SLIM(nn.Module):
     def __init__(self, args: Namespace, input_size: int, output_size: int) -> None:
-        super(CNN_Simple, self).__init__()
+        super(VGG11_SLIM, self).__init__()
         self.args = args
-        self.conv_layers_early = nn.ModuleList()
-        self.conv_layers_late = nn.ModuleList()
-        self.hidden_linear = nn.ModuleList()
         self.input_size = input_size
         self.output_size = output_size
-        self.conv2lin_size = 256 * 2 * 2
-        self.conv2lin_mapping_size = 2*2
-        self.penultimate_layer_size = 1024
-        self.conv_layers_early.append(nn.Identity())
-        self.conv_layers_late.extend([
-            SparseConv2d(3, 32, kernel_size=3, padding=1, layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-
-            SparseConv2d(32, 64, kernel_size=3, padding=1, layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-
-            SparseConv2d(64, 128, kernel_size=3, padding=1,layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-            SparseConv2d(128, 128, kernel_size=3, padding=1, layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-
-            SparseConv2d(128, 256, kernel_size=3, padding=1, layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-
-            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-        ])
-        self.hidden_linear.extend([
-            SparseLinear(self.conv2lin_size, 1024, layer_name="linear"), nn.ReLU(),
-        ])
-        self.penultimate_layer = nn.ModuleList([SparseLinear(1024, 1024, layer_name="linear"), nn.ReLU()])
-
+        if args.dataset in ["CIFAR10", "CIFAR100"]:
+            self.conv2lin_size = 256 * 2 * 2 # 32x32画像は4回のMaxPoolingで2x2になる
+        elif args.dataset == "TinyImagenet":
+            self.conv2lin_size = 256 * 4 * 4 # 64x64画像は4回のMaxPoolingで4x4になる
+        else:
+            self.conv2lin_size = 256 * 1 * 1 # MNISTなど
+        self.conv2lin_size = 256 * 1 * 1 # CIFAR/TinyImageNet
+        if args.dataset in ["MNIST", "FMNIST", "EMNIST"]:
+             self.conv2lin_size = 256 * 1 * 1 # MNISTサイズの場合
+        
+        self.features = nn.Sequential(
+            SparseConv2d(3, 32, kernel_size=3, padding=1, layer_name="conv_1"), nn.ReLU(inplace=True),
+            SparseConv2d(32, 64, kernel_size=3, padding=1, layer_name="conv_2"), nn.ReLU(inplace=True), nn.MaxPool2d(kernel_size=2, stride=2),
+            SparseConv2d(64, 128, kernel_size=3, padding=1, layer_name="conv_3"), nn.ReLU(inplace=True),
+            SparseConv2d(128, 128, kernel_size=3, padding=1, layer_name="conv_4"), nn.ReLU(inplace=True), nn.MaxPool2d(kernel_size=2, stride=2),
+            SparseConv2d(128, 256, kernel_size=3, padding=1, layer_name="conv_5"), nn.ReLU(inplace=True),
+            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_6"), nn.ReLU(inplace=True), nn.MaxPool2d(kernel_size=2, stride=2),
+            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_7"), nn.ReLU(inplace=True),
+            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_8"), nn.ReLU(inplace=True), nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        self.classifier = nn.Sequential(
+            SparseLinear(self.conv2lin_size, 1024, layer_name="linear_1"), nn.ReLU(),
+            SparseLinear(1024, 1024, layer_name="linear_2"),
+        )
         self.output_layer = SparseOutput(1024, output_size, layer_name="output")
-        if self.output_size == 100:
-            self._initialize_weights()
-        self.current_young_neurons = [[]] + [list(range(param.shape[0])) for param in self.parameters() if len(param.shape) != 1]
-        self.current_learner_neurons = [ list(range(0)) for param in self.parameters() if len(param.shape) != 1] + [[]]
 
-        # SYNAPSE: unit_ranksの初期化
-        self.immature_pool_ratio = 0.1 # Immatureニューロンの割合
-
-        unit_ranks_list = [([999]*self.input_size, "input")]
+        self.immature_pool_ratio = 0.1
+        self.unit_ranks = [(np.array([999]*self.input_size, dtype=int), "input")]
         for m in self.modules():
             if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput)):
                 num_units = m.weight.data.shape[0]
-                initial_ranks = np.full(num_units, IMMATURE, dtype=int)
-                unit_ranks_list.append((initial_ranks, m.layer_name))
+                self.unit_ranks.append((np.full(num_units, IMMATURE, dtype=int), m.layer_name))
 
-        self.unit_ranks = [(np.array(unit_types), name) for unit_types, name in unit_ranks_list]
-
-        # SYNAPSE: 状態ごとのニューロンリストを管理する変数を初期化
-        self.immature_neurons = []
-        self.transitional_neurons = []
-        self.mature_neurons = []
-        self.update_neuron_state_lists() # 初期状態を反映
-
-
-
+        self.update_neuron_state_lists()
         self.freeze_masks = []
-        unit_ranks_list = [([999]*self.input_size, "input")]
-        for m in self.modules():
-            if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput)):
-                unit_ranks_list.append(([0]*m.weight.data.shape[0], m.layer_name))  # type: ignore
-        self.unit_ranks = [(np.array(unit_types), name)
-                           for unit_types, name in unit_ranks_list]
 
-    # SYNAPSE:
     def update_neuron_state_lists(self):
-        """unit_ranksに基づいて、各状態のニューロンリストを更新"""
         self.immature_neurons = [list(np.where(ranks == IMMATURE)[0]) for ranks, _ in self.unit_ranks]
         self.transitional_neurons = [list(np.where(ranks == TRANSITIONAL)[0]) for ranks, _ in self.unit_ranks]
         self.mature_neurons = [list(np.where(ranks >= MATURE_BASE_RANK)[0]) for ranks, _ in self.unit_ranks]
 
-    def reset_frozen_gradients(self):
-        """
-        freeze_masksに基づき、凍結対象のニューロンの勾配を0にリセットします。
-        optimizer.step() の直前に呼び出されます。
-        """
-        # freeze_masksが設定されていなければ何もしません
-        if not hasattr(self, 'freeze_masks') or not self.freeze_masks:
-            return
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
 
-        mask_index = 0
-        for module in self.modules():
-            if isinstance(module, (SparseLinear, SparseConv2d, SparseOutput)):
-                if module.weight.grad is not None:
-                    # マスクがTrueの部分の勾配を0にします
-                    weight_freeze_mask, bias_freeze_mask = self.freeze_masks[mask_index]
-                    module.weight.grad.data[weight_freeze_mask] = 0
-                    if module.bias is not None and module.bias.grad is not None:
-                        module.bias.grad.data[bias_freeze_mask] = 0
-                mask_index += 1
-            
-            # BatchNorm層の勾配凍結
-            if isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d)):
-                if hasattr(module, 'frozen_units') and module.frozen_units is not None and module.affine:
-                    if module.weight.grad is not None:
-                        module.weight.grad.data.masked_fill_(module.frozen_units, 0)
-                    if module.bias.grad is not None:
-                        module.bias.grad.data.masked_fill_(module.frozen_units, 0)
+    def forward_output(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.forward(x)
+        x = self.output_layer(x)
+        return x
+    
+    def get_activations(self, x: torch.Tensor, return_output=False) -> List[Any]:
+        activations = [x.detach().cpu()]
+        for layer in self.features:
+            x = layer(x)
+            if isinstance(layer, nn.ReLU):
+                activations.append(x.detach().cpu())
+        
+        x = x.view(x.size(0), -1)
+        
+        for layer in self.classifier:
+            x = layer(x)
+            if isinstance(layer, nn.ReLU):
+                activations.append(x.detach().cpu())
+        
+        # Penultimate layer activation
+        activations.append(x.detach().cpu())
+        
+        output = self.output_layer(x)
+        activations.append(output.detach().cpu())
+        
+        if return_output:
+            return output, activations
+        return activations
+        
+    def reset_frozen_gradients(self):
+        # ... (この関数はsynapse_operations.pyに移管したので、ここは簡略化しても良い)
+        pass
+
+    def l2_loss(self):
+        # ... (この関数は実装が必要です。一旦0を返します)
+        return 0.0
 
 
 class CNN_MNIST(CNN_Simple):

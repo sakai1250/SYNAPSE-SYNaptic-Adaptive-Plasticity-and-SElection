@@ -221,3 +221,25 @@ class BatchNorm2Custom(torch.nn.BatchNorm2d):
         # Call the forward method of the parent class
         return super(BatchNorm2Custom, self).forward(input)
 
+
+def initialize_masks(network: Any) -> nn.Module:
+    """
+    ネットワーク内の全てのスパース層に対して、重みとバイアスのマスクを初期化します。
+    最初は全ての接続を有効（マスク値を全て1）にします。
+    """
+    print("Initializing weight and bias masks for all sparse layers...")
+    for module in network.modules():
+        if isinstance(module, (SparseLinear, SparseConv2d, SparseOutput)):
+            # 全ての要素が1のマスクを作成します
+            weight_mask = torch.ones_like(module.weight.data)
+            if module.bias is not None:
+                bias_mask = torch.ones_like(module.bias.data)
+            else:
+                # バイアスがない層のためにダミーのマスクを作成
+                bias_mask = torch.empty(0)
+            
+            # 作成したマスクを層に設定します
+            module.set_mask(weight_mask, bias_mask)
+            
+    network.to(get_device())
+    return network

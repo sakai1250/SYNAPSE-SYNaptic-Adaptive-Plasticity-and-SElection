@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 import pickle
 from torchsummary import summary
 
+from Source.resnet18 import ResNet18 # 型チェックのためにインポート
 
 def group_list_using_l1(l1, l2):
     groups_1 = []
@@ -150,16 +151,17 @@ def log_end_of_phase(args: Namespace, network: Any, context_detector: Any, episo
 
 
 def write_units(writer, network: Any):
-    if isinstance(network, ResNet18):
-        all_units = [list(range(a)) for a, _ in network.layers]
-    else:
-        weights = network.get_weight_bias_masks_numpy()
-        all_units = [list(range(weights[0][0].shape[1]))] + [list(range(w[1].shape[0])) for w in weights]
-    writer.writerow(["All Units"] + [len(u) for u in all_units])
-    writer.writerow(["Immature Neurons"] + [len((u == 0).nonzero()[0])
-                    for u, _ in network.unit_ranks])
-    writer.writerow(["Transitional Neurons"] + [len((u == 1).nonzero()[0])
-                    for u, _ in network.unit_ranks])
-    writer.writerow(["Mature Neurons"] + [len((u > 1).nonzero()[0])
-                    for u, _ in network.unit_ranks])
+    """
+    SYNAPSEのニューロン状態（Immature, Transitional, Mature）をログに出力します。
+    """
+    # unit_ranks[0]は入力層なので、それ以降のニューロン数をリスト化
+    all_units_counts = [len(ranks) for ranks, _ in network.unit_ranks[1:]]
+    
+    writer.writerow(["All Units"] + all_units_counts)
+    
+    # 状態ごとのニューロン数を出力 (unit_ranks[0]は入力層なのでスライス)
+    writer.writerow(["Immature Neurons"] + [len(u) for u in network.immature_neurons[1:]])
+    writer.writerow(["Transitional Neurons"] + [len(u) for u in network.transitional_neurons[1:]])
+    writer.writerow(["Mature Neurons"] + [len(u) for u in network.mature_neurons[1:]])
+    
     return writer

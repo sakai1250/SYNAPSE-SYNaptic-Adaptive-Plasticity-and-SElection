@@ -5,6 +5,8 @@ import torch
 from torch.utils.data import DataLoader
 from typing import Any, List, Dict
 
+from Source.helper import get_device, SparseLinear, SparseConv2d, SparseOutput
+
 # SYNAPSE: ニューロンの状態を定義します。
 # Immature: 待機中のニューロン
 # Transitional: 新規タスクへの適応中に訓練されるニューロン
@@ -84,46 +86,65 @@ def mature_transitional_neurons(network: Any) -> Any:
     print("ニューロンの成熟化が完了しました。")
     return network
 
+
 def update_freeze_masks_synapse(network: Any) -> Any:
     """
     SYNAPSEの仕様に基づき、Matureニューロンの重みを凍結（保護）するためのマスクを更新します。
-    このマスクは、後で`reset_frozen_gradients`メソッドによって使われます。
     """
     print("Matureニューロンの重みを保護するためのフリーズマスクを更新します。")
+    
+    # 1. unit_ranksから「名札」をキーにした対応表を作成
+    ranks_by_name = {name: ranks for ranks, name in network.unit_ranks}
+    mature_neurons_by_name = {
+        name: list(np.where(ranks >= MATURE_BASE_RANK)[0]) 
+        for name, ranks in ranks_by_name.items()
+    }
+
     freeze_masks = []
     
-    # ネットワーク内の各層を調べていきます
-    module_idx = 0
+    # 2. ネットワークの全モジュールを巡回
     for module in network.modules():
         if isinstance(module, (SparseLinear, SparseConv2d, SparseOutput)):
-            # この層のMatureニューロンのインデックスを取得します
-            # unit_ranksは入力層も含むので、インデックスを1つずらします
-            mature_neuron_indices = network.mature_neurons[module_idx + 1]
+            # モジュールの「名札」を取得
+            layer_name = module.layer_name
+            
+            # 名札が対応表に無ければスキップ
+            if layer_name not in mature_neurons_by_name:
+                continue
 
-            # 重みとバイアスのマスクを初期化（全て保護しない=False）
+            # 対応表から、この層のMatureニューロンのリストを取得
+            mature_neuron_indices = mature_neurons_by_name[layer_name]
+
             weight_mask = torch.zeros_like(module.weight.data, dtype=torch.bool)
             bias_mask = torch.zeros_like(module.bias.data, dtype=torch.bool)
 
             if mature_neuron_indices:
-                # Matureニューロンに対応する行（出力側）のマスクをTrueに設定します
-                # これにより、このニューロンから出ていく全ての接続の重みが保護対象になります。
-                weight_mask[mature_neuron_indices, :] = True
+                # テンソルの次元数に応じてインデックス指定を切り替える
+                if module.weight.data.dim() == 4: # 畳み込み層
+                    weight_mask[mature_neuron_indices, :, :, :] = True
+                else: # 全結合層
+                    weight_mask[mature_neuron_indices, :] = True
+                
                 bias_mask[mature_neuron_indices] = True
             
             freeze_masks.append((weight_mask.to(get_device()), bias_mask.to(get_device())))
-            module_idx += 1
             
     network.freeze_masks = freeze_masks
     
-    # BatchNorm層の凍結も同様に行います
+    # BatchNorm層の凍結ロジック (こちらもlayer_nameベースでより堅牢に)
     for module in network.modules():
         if isinstance(module, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d)):
-            if hasattr(module, 'layer_index'): # カスタムBN層か確認
-                layer_index = module.layer_index
-                frozen_units = torch.tensor(network.unit_ranks[layer_index][0] >= MATURE_BASE_RANK, dtype=torch.bool).to(get_device())
-                module.freeze_units(frozen_units)
+            if hasattr(module, 'layer_name'):
+                layer_name = module.layer_name
+                if layer_name in ranks_by_name:
+                    ranks = ranks_by_name[layer_name]
+                    frozen_units = torch.tensor(ranks >= MATURE_BASE_RANK, dtype=torch.bool).to(get_device())
+                    if hasattr(module, 'freeze_units'):
+                        module.freeze_units(frozen_units)
 
     return network
+
+
 def get_most_activated_mature_neuron(network: Any, data_loader: DataLoader) -> tuple[int, int] | None:
     """
     データセットに対して、最も平均活性度が高かったMatureニューロンを見つけます。

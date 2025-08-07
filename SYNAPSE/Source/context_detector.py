@@ -127,7 +127,6 @@ class SimilarityAnalyzer():
         print(f"計算された最大類似度スコア: {max_similarity:.4f}")
         return max_similarity
 
-# --- NICEのヘルパー関数を一部修正して流用 ---
 def get_n_samples_per_class(dataset, n: int, target_class: int):
     indices = []
     # dataset.datasetから対象クラスのインデックスだけを取得
