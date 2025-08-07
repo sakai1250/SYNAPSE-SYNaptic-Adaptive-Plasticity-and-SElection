@@ -1,9 +1,9 @@
 # Source/synapse_operations.py
 
-from typing import Any
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from typing import Any, List, Dict
 
 # SYNAPSE: ニューロンの状態を定義します。
 # Immature: 待機中のニューロン

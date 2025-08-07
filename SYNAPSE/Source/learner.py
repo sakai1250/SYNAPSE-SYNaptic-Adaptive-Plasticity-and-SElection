@@ -24,34 +24,36 @@ from tqdm import tqdm
 import os
 
 class Learner():
-
     def __init__(self, args: Namespace, network: Any, scenario: GenericCLScenario,
                  input_size: int, task2classes: Dict, log_dirpath: str):
         self.args, self.input_size = args, input_size
         self.task2classes = task2classes
         self.log_dirpath = log_dirpath
         self.optim_obj = getattr(torch.optim, args.optimizer)
-        # this is needed to assign masks for later
         self.network = random_prune(network.to(get_device()), 0.0)
-        self.context_detector = ContextDetector(args, network.penultimate_layer_size, task2classes)
+        
+        # SYNAPSE: SimilarityAnalyzerのみを使用します
+        self.similarity_analyzer = SimilarityAnalyzer(args, network.penultimate_layer_size, task2classes)
+        
         self.original_scenario = scenario
         print("Model: \n", self.network)
-        # SYNAPSE: 
-        self.similarity_analyzer = SimilarityAnalyzer(args, network.penultimate_layer_size, task2classes)
 
     def start_episode(self, train_episode: TCLExperience, val_episode: TCLExperience, test_episode: TCLExperience, episode_index: int):
         print("****** Starting Episode-{}   Classes: {} ******".format(episode_index, train_episode.classes_in_this_experience))
 
     def end_episode(self, train_episode: TCLExperience, val_episode: TCLExperience, test_episode: TCLExperience, episode_index: int):
-        print("******  Ending Episode ****** ")
+        print("****** Ending Episode ****** ")
+        # SYNAPSE: 学習完了後、新しいクラスのプロトタイプを更新します
         self.similarity_analyzer.update_prototypes(self.network, train_episode, episode_index)
-        # self.context_detector.push_activations(self.network, train_episode, episode_index)
-        self.network = increase_unit_ranks(self.network)
-        self.network = update_freeze_masks(self.network)
-        self.network.freeze_bn_layers()
-        log_end_of_episode(self.args, self.network, self.context_detector,
+        
+        # SYNAPSE: NICEの古いランクアップ処理は不要なのでコメントアウトします
+        # self.network = increase_unit_ranks(self.network)
+        # self.network = update_freeze_masks(self.network)
+        # self.network.freeze_bn_layers()
+        
+        # ログ記録関数を呼び出します
+        log_end_of_episode(self.args, self.network, self.similarity_analyzer,
                            self.original_scenario, episode_index, self.log_dirpath)
-
 
     def learn_episode(self, train_episode: TCLExperience, ..., episode_index: int):
         train_loader, val_loader, test_loader = get_data_loaders(...)

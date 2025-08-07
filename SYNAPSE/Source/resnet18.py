@@ -82,37 +82,22 @@ class ResNet18(nn.Module):
         self.output_layer = SparseOutput(int(512 * self.c), output_size, layer_name="output")
 
         # SYNAPSE: unit_ranksの初期化
-        self.immature_pool_ratio = 0.1 # Immatureニューロンの割合を10%に設定
-
-        self.unit_ranks = [(np.array([999]*self.input_size), "conv_early_0")]
+       self.immature_pool_ratio = 0.1 # Immatureニューロンの割合を10%に設定
+        self.unit_ranks = [(np.array([999]*self.input_size, dtype=int), "conv_early_0")]
 
         for num_units, layer_name in self.layers[1:]:
-            # 各層でImmature Poolのニューロン数を計算
-            num_immature = int(num_units * self.immature_pool_ratio)
-            # SYNAPSEの初期状態では、全てをImmatureとして設定
             initial_ranks = np.full(num_units, IMMATURE, dtype=int)
             self.unit_ranks.append((initial_ranks, layer_name))
 
-        # 出力層も同様に初期化
-        num_immature_output = int(output_size * self.immature_pool_ratio)
         output_ranks = np.full(output_size, IMMATURE, dtype=int)
         self.unit_ranks.append((output_ranks, "output"))
 
-        # SYNAPSE: 状態ごとのニューロンリストを管理する変数を初期化
         self.immature_neurons = []
         self.transitional_neurons = []
         self.mature_neurons = []
         self.update_neuron_state_lists() # 初期状態を反映
-
-        self.classes_seen_so_far = []
-        self.current_young_neurons = [[]] + [list(range(num_units)) for num_units, _ in self.layers[1:]] + [list(range(output_size))]
-        self.current_learner_neurons = [[] for _, _ in self.layers]
+        
         self.freeze_masks = []
-        self.unit_ranks = [(np.array([999]*self.input_size), "conv_early_0")]
-        for num_units, layer_name in self.layers[1:]:
-            self.unit_ranks.append((np.array([0]*num_units), layer_name))
-
-        self.unit_ranks.append((np.array([0]*output_size), "output"))  # type: ignore
 
     def get_units_ranks_dict(self):
         return {name: ranks for ranks, name in self.unit_ranks}
