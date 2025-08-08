@@ -31,7 +31,7 @@ def phase_training_scl(network: Any, phase_epochs: int, optimizer: Any, train_lo
     scl_loss_func = losses.SupConLoss(temperature=0.07)
     ce_loss_func = nn.CrossEntropyLoss()
     
-    # 2つの損失の重み（調整可能なハイパーパラメータ）
+    # 2つの損失のバランスを調整
     scl_weight = 0.5
     ce_weight = 0.5
 
@@ -43,27 +43,19 @@ def phase_training_scl(network: Any, phase_epochs: int, optimizer: Any, train_lo
             data, target = data.to(get_device()), target.to(get_device())
             optimizer.zero_grad()
 
-            # 1. 特徴量（Embeddings）を取得
             embeddings = network.forward(data)
-            
-            # 2. 特徴量から最終出力を取得
             output = network.output_layer(embeddings)
 
-            # 3. 2種類の損失を計算
             scl_loss = scl_loss_func(embeddings, target)
             ce_loss = ce_loss_func(output, target)
-            
-            # L2正則化
             reg_loss = args.weight_decay * network.l2_loss()
 
-            # 損失を結合
             batch_loss = (scl_weight * scl_loss) + (ce_weight * ce_loss) + reg_loss
             
             batch_loss.backward()
 
-            if hasattr(network, 'freeze_masks') and network.freeze_masks:
-                if hasattr(network, 'reset_frozen_gradients'):
-                    network.reset_frozen_gradients()
+            if hasattr(network, 'freeze_masks') and network.freeze_masks and hasattr(network, 'reset_frozen_gradients'):
+                network.reset_frozen_gradients()
             optimizer.step()
             
             total_loss += batch_loss.item()

@@ -195,12 +195,10 @@ class SimilarityAnalyzer():
         print("Updating class prototypes...")
         network.eval()
         classes_in_this_episode = train_episode.classes_in_this_experience
-        
         with torch.no_grad():
             for class_id in classes_in_this_episode:
                 samples, _ = get_n_samples_per_class(train_episode, n=50, target_class=class_id)
                 if samples is None: continue
-
                 embeddings = network.forward(samples.to(get_device()))
                 prototype = embeddings.mean(dim=0)
                 self.class_prototypes[class_id] = prototype
@@ -216,21 +214,11 @@ class SimilarityAnalyzer():
         data, _, _ = next(iter(data_loader))
         data = data.to(get_device())
         max_similarity = 0.0
-
         with torch.no_grad():
-            # (バッチ, 特徴量次元数) の形状のテンソル
             current_embeddings = network.forward(data)
-            
-            # 保存されているプロトタイプを (クラス数, 特徴量次元数) のテンソルにまとめる
             prototypes_tensor = torch.stack(list(self.class_prototypes.values()))
-
-            # コサイン類似度を計算
-            # (バッチ, クラス数) の形状の類似度行列が求まる
             cos_sim = F.cosine_similarity(current_embeddings.unsqueeze(1), prototypes_tensor.unsqueeze(0), dim=2)
-            
-            # バッチ全体での最大類似度を取得
             max_similarity = cos_sim.max().item()
-        
         network.train()
         print(f"Calculated Max Similarity Score: {max_similarity:.4f}")
         return max_similarity

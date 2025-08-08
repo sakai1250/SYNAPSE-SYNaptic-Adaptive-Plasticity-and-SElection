@@ -20,7 +20,7 @@ MATURE_BASE_RANK = 1  # Matureニューロンは1以上のランク値を持ち�
 
 def set_neuron_state(network: Any, layer_index: int, neuron_indices: list, new_state: int) -> Any:
     """
-    指定されたニューロンの状態（ランク）を変更します。
+    指定されたニューロンの状態（ランク）を変更
 
     Args:
         network: ネットワークのインスタンス
@@ -38,14 +38,14 @@ def set_neuron_state(network: Any, layer_index: int, neuron_indices: list, new_s
     ranks[neuron_indices] = new_state
     network.unit_ranks[layer_index] = (ranks, name)
 
-    # 変更を反映させるために、状態ごとのニューロンリストを更新します
+    # 変更を反映させるために、状態ごとのニューロンリストを更新
     network.update_neuron_state_lists()
     return network
 
 def add_new_neuron(network: Any, layer_index: int, num_to_add: int = 1) -> Any:
     """
-    Immature Poolからニューロンを取り出し、Transitional状態に設定します。
-    これはSYNAPSEの「Add」操作の核となる部分です。
+    Immature Poolからニューロンを取り出し、Transitional状態に設定
+    これはSYNAPSEの「Add」操作の核となる部分
 
     Args:
         network: ネットワークのインスタンス
@@ -57,22 +57,22 @@ def add_new_neuron(network: Any, layer_index: int, num_to_add: int = 1) -> Any:
     """
     immature_pool = network.immature_neurons[layer_index]
     if len(immature_pool) < num_to_add:
-        print(f"警告: 層 {layer_index} のImmatureニューロンが不足しています！")
-        # 本来はここで補充(rebalancing)処理を呼び出すことも考えられます
+        print(f"警告: 層 {layer_index} のImmatureニューロンが不足！")
+        # 本来はここで補充(rebalancing)処理を呼び出すことも考えられる
         return network
 
-    # Poolの先頭から必要な数だけニューロンを選択します
+    # Poolの先頭から必要な数だけニューロンを選択
     new_neurons = immature_pool[:num_to_add]
 
-    # 選択したニューロンの状態をTransitionalに変更します
+    # 選択したニューロンの状態をTransitionalに変更
     network = set_neuron_state(network, layer_index, new_neurons, TRANSITIONAL)
-    print(f"層 {layer_index} に {len(new_neurons)} 個のニューロンをTransitionalとして追加しました。")
+    print(f"層 {layer_index} に {len(new_neurons)} 個のニューロンをTransitionalとして追加")
     return network
 
 def mature_transitional_neurons(network: Any) -> Any:
     """
-    現在Transitional状態にある全てのニューロンをMature状態へ遷移させます。
-    学習フェーズの完了後に呼び出されます。
+    現在Transitional状態にある全てのニューロンをMature状態へ遷移
+    学習フェーズの完了後に呼び出される
 
     Returns:
         ニューロンが成熟化されたネットワーク
@@ -81,17 +81,17 @@ def mature_transitional_neurons(network: Any) -> Any:
     for layer_idx, (ranks, name) in enumerate(network.unit_ranks):
         transitional_indices = (ranks == TRANSITIONAL).nonzero()[0]
         if len(transitional_indices) > 0:
-            # 新しいMatureランクを決定します。
-            # 例えば、既存のMatureニューロンの最大ランク+1、といった戦略が考えられます。
+            # 新しいMatureランクを決定
+            # 例えば、既存のMatureニューロンの最大ランク+1、といった戦略が考えられる
             max_rank = np.max(ranks) if np.any(ranks >= MATURE_BASE_RANK) else 0
             new_rank = max(MATURE_BASE_RANK, int(max_rank) + 1)
             network = set_neuron_state(network, layer_idx, transitional_indices, new_rank)
-    print("ニューロンの成熟化が完了しました。")
+    print("ニューロンの成熟化が完了")
     return network
 
 def update_freeze_masks_synapse(network: Any) -> Any:
     """
-    SYNAPSEの仕様に基づき、Matureニューロンの重みを凍結（保護）するためのマスクを更新します。
+    SYNAPSEの仕様に基づき、Matureニューロンの重みを凍結（保護）するためのマスクを更新
     """
     freeze_masks = []
 
@@ -134,9 +134,9 @@ def update_freeze_masks_synapse(network: Any) -> Any:
 
 def get_most_activated_mature_neuron(network: Any, data_loader: DataLoader) -> tuple[int, int] | None:
     """
-    データセットに対して、最も平均活性度が高かったMatureニューロンを見つけます。
+    データセットに対して、最も平均活性度が高かったMatureニューロンを見つける
     """
-    print("最も活性化したMatureニューロンを探索します...")
+    print("最も活性化したMatureニューロンを探索...")
     network.eval()
     
     best_neuron_info = None
@@ -160,7 +160,7 @@ def get_most_activated_mature_neuron(network: Any, data_loader: DataLoader) -> t
                     layer_activations = layer_activations.mean(dim=[2, 3])
                 
                 # このバッチでの活性度を合計に加算
-                activations_sum[layer_idx] += layer_activations[:, mature_indices].sum(dim=0)
+                activations_sum[layer_idx] += layer_activations[:, mature_indices].sum(dim=0).to(get_device())
     
     # 平均活性度が最大のニューロンを探す
     for layer_idx, sums in activations_sum.items():
@@ -175,9 +175,9 @@ def get_most_activated_mature_neuron(network: Any, data_loader: DataLoader) -> t
 
     network.train()
     if best_neuron_info:
-        print(f"探索完了: 層 {best_neuron_info[0]}, ニューロン {best_neuron_info[1]} が最も活性化しました。")
+        print(f"探索完了: 層 {best_neuron_info[0]}, ニューロン {best_neuron_info[1]} が最も活性化した")
     else:
-        print("探索失敗: Matureニューロンが見つかりませんでした。")
+        print("探索失敗: Matureニューロンが見つからかった")
         
     return best_neuron_info
 
@@ -198,7 +198,7 @@ def get_activation_patterns(network: Any, data_loader: DataLoader, layer_idx: in
     return torch.cat(all_activations, dim=0).T
 
 def integrate_neurons(network: Any, data_loader: DataLoader, threshold: float = 0.95) -> Any:
-    print("Integrate操作: 冗長なニューロンの統合を開始します...")
+    print("Integrate操作: 冗長なニューロンの統合を開始...")
     module_map = {idx+1: m for idx, m in enumerate(network.modules()) if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput))}
 
     for layer_idx, mature_indices in enumerate(network.mature_neurons):
@@ -238,27 +238,27 @@ def integrate_neurons(network: Any, data_loader: DataLoader, threshold: float = 
 
 def share_neuron(network: Any, layer_index: int, neuron_index: int) -> Any:
     """
-    「Share」操作。既存のMatureニューロンを再学習の対象にします。
-    状態をMatureからTransitionalへ変更します。
+    「Share」操作。既存のMatureニューロンを再学習の対象にする
+    状態をMatureからTransitionalへ変更
     """
-    print(f"Share操作: 層 {layer_index} のMatureニューロン {neuron_index} をTransitional状態に変更します。")
+    print(f"Share操作: 層 {layer_index} のMatureニューロン {neuron_index} をTransitional状態に変更")
     network = set_neuron_state(network, layer_index, [neuron_index], TRANSITIONAL)
     return network
 
 def duplicate_neuron(network: Any, source_layer_idx: int, source_neuron_idx: int) -> Any:
     """
-    「Duplicate」操作。既存のMatureニューロンを複製します。
+    「Duplicate」操作。既存のMatureニューロンを複製
     """
-    print(f"Duplicate操作: 層 {source_layer_idx} のニューロン {source_neuron_idx} を複製します。")
+    print(f"Duplicate操作: 層 {source_layer_idx} のニューロン {source_neuron_idx} を複製")
     # 1. Immature Poolから新しいニューロンを取得
     immature_pool = network.immature_neurons[source_layer_idx]
     if not immature_pool:
-        print(f"警告: Duplicate操作失敗。層 {source_layer_idx} にImmatureニューロンがありません。")
+        print(f"警告: Duplicate操作失敗。層 {source_layer_idx} にImmatureニューロンがない")
         return network
     target_neuron_idx = immature_pool[0]
 
     # 2. 重みをコピー
-    #    ネットワークのモジュールをたどり、対象の重みを見つける必要があります。
+    #    ネットワークのモジュールをたどり、対象の重みを見つける必要がある
     module_found = False
     module_idx = 0
     for module in network.modules():
@@ -279,7 +279,7 @@ def duplicate_neuron(network: Any, source_layer_idx: int, source_neuron_idx: int
             module_idx += 1
     
     if not module_found:
-        print("警告: 重みコピー対象のモジュールが見つかりませんでした。")
+        print("警告: 重みコピー対象のモジュールが見つからなかった")
         return network
 
     # 3. 複製したニューロンの状態をTransitionalに設定
@@ -290,9 +290,9 @@ def duplicate_neuron(network: Any, source_layer_idx: int, source_neuron_idx: int
 
 def initialize_strategically(network: Any, new_neurons_info: Dict[int, List[int]]):
     """
-    「Add」操作で追加されたニューロンを戦略的に初期化します。
+    「Add」操作で追加されたニューロンを戦略的に初期化
     既存のMatureニューロン群の重みの平均から逆方向に初期化することで、
-    特徴空間上で未探索の領域を向くように促します。
+    特徴空間上で未探索の領域を向くように促す
     """
     print("戦略的初期化を実行します...")
     
@@ -325,7 +325,7 @@ def initialize_strategically(network: Any, new_neurons_info: Dict[int, List[int]
                         if module.bias is not None:
                             module.bias.data[neuron_idx] = 0.0
                 
-                print(f"  - 層 {layer_idx} のニューロン {new_neuron_indices} を戦略的に初期化しました。")
+                print(f"  - 層 {layer_idx} のニューロン {new_neuron_indices} を戦略的に初期化した")
 
             module_idx += 1
             
@@ -333,9 +333,9 @@ def initialize_strategically(network: Any, new_neurons_info: Dict[int, List[int]
 
 def replenish_immature_pool(network: Any) -> Any:
     """
-    「Replenish」操作。Immatureニューロンが不足していたら補充します。
+    「Replenish」操作。Immatureニューロンが不足していたら補充
     """
-    print("Replenish操作: Immature Poolの補充を確認します...")
+    print("Replenish操作: Immature Poolの補充を確認...")
     for layer_idx, (ranks, name) in enumerate(network.unit_ranks):
         if layer_idx == 0: continue # 入力層はスキップ
 
@@ -357,6 +357,6 @@ def replenish_immature_pool(network: Any) -> Any:
                 
                 neurons_to_retire = sorted_mature_indices[:num_to_replenish]
                 network = set_neuron_state(network, layer_idx, neurons_to_retire, IMMATURE)
-                print(f"  - 層 {layer_idx} で {len(neurons_to_retire)} 個のニューロンを補充のためにImmatureにしました。")
+                print(f"  - 層 {layer_idx} で {len(neurons_to_retire)} 個のニューロンを補充のためにImmatureにした")
 
     return network

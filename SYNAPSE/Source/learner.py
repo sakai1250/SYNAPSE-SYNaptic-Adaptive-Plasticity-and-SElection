@@ -41,11 +41,11 @@ class Learner():
         # === Step 1 & 2: 分析と戦略決定 (エピソードの最初に1回だけ実行) ===
         similarity_score = self.similarity_analyzer.calculate_similarity_score(self.network, train_loader)
         newly_added_neurons = {}
-        if similarity_score > 0.8:
+        if similarity_score > 0.6:
             print("SYNAPSE Operation: Share")
             target_info = get_most_activated_mature_neuron(self.network, train_loader)
             if target_info: self.network = share_neuron(self.network, *target_info)
-        elif 0.4 < similarity_score <= 0.8:
+        elif 0.2 < similarity_score <= 0.6:
             print("SYNAPSE Operation: Duplicate")
             target_info = get_most_activated_mature_neuron(self.network, train_loader)
             if target_info: self.network = duplicate_neuron(self.network, *target_info)

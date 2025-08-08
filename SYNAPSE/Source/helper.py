@@ -224,8 +224,8 @@ class BatchNorm2Custom(torch.nn.BatchNorm2d):
 
 def initialize_masks(network: Any) -> nn.Module:
     """
-    ネットワーク内の全てのスパース層に対して、重みとバイアスのマスクを初期化します。
-    最初は全ての接続を有効（マスク値を全て1）にします。
+    ネットワーク内の全てのスパース層に対して、重みとバイアスのマスクを初期化
+    最初は全ての接続を有効（マスク値を全て1）
     """
     print("Initializing weight and bias masks for all sparse layers...")
     for module in network.modules():
