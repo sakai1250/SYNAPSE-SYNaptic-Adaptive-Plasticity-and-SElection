@@ -30,7 +30,7 @@ Thumbs.db
 *.pth
 *.onnx
 
-# 出力ディレクトリ
+# 出力ディレクトリ5
 outputs/
 results/
-wandb/
+*/wandb/
