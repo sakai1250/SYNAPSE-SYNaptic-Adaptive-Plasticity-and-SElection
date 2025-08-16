@@ -1,0 +1,175 @@
+{
+    "os": "Linux-6.8.0-65-generic-x86_64-with-glibc2.35",
+    "python": "3.10.9",
+    "heartbeatAt": "2025-08-15T21:13:03.146489",
+    "startedAt": "2025-08-15T21:13:02.525677",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--experiment_name",
+        "TinyImagenet_MEMO1_SEED0",
+        "--memo_per_class_context",
+        "25",
+        "--context_layers",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "--context_learner",
+        "LogisticRegression(random_state=0, max_iter=25, C=0.001)",
+        "--dataset",
+        "TinyImagenet",
+        "--number_of_tasks",
+        "10",
+        "--model",
+        "ResNet18",
+        "--seed",
+        "0",
+        "--learning_rate",
+        "0.01",
+        "--batch_size",
+        "64",
+        "--weight_decay",
+        "0.0",
+        "--phase_epochs",
+        "5",
+        "--activation_perc",
+        "97.5",
+        "--max_phases",
+        "5",
+        "--use_wandb",
+        "--wandb_project",
+        "SYNAPSE_TinyImagenet"
+    ],
+    "state": "running",
+    "program": "/media/blackie/8000GB_blackie/SYNAPSE-SYNaptic-Adaptive-Plasticity-and-SElection/SYNAPSE/launch.py",
+    "codePath": "SYNAPSE/launch.py",
+    "git": {
+        "remote": "https://github.com/sakai1250/SYNAPSE-SYNaptic-Adaptive-Plasticity-and-SElection.git",
+        "commit": "1a12317b2cc288b0b8234e07048c09477310f794"
+    },
+    "email": "200442066@ccalumni.meijo-u.ac.jp",
+    "root": "/media/blackie/8000GB_blackie/SYNAPSE-SYNaptic-Adaptive-Plasticity-and-SElection",
+    "host": "blackie",
+    "username": "blackie",
+    "executable": "/home/blackie/anaconda3/envs/research/bin/python",
+    "cpu_count": 10,
+    "cpu_count_logical": 16,
+    "cpu_freq": {
+        "current": 3049.0348125,
+        "min": 800.0,
+        "max": 4400.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 799.029,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 3889.773,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 3442.5,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2607.276,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2948.125,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 3058.977,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 3409.862,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 4099.957,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 4100.0,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2765.633,
+            "min": 800.0,
+            "max": 3500.0
+        },
+        {
+            "current": 2932.791,
+            "min": 800.0,
+            "max": 3500.0
+        },
+        {
+            "current": 2722.683,
+            "min": 800.0,
+            "max": 3500.0
+        },
+        {
+            "current": 1967.452,
+            "min": 800.0,
+            "max": 3500.0
+        }
+    ],
+    "disk": {
+        "total": 915.3232879638672,
+        "used": 95.4001235961914
+    },
+    "gpu": "NVIDIA GeForce RTX 4080 SUPER",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 4080 SUPER",
+            "memory_total": 17171480576
+        }
+    ],
+    "memory": {
+        "total": 125.57126998901367
+    }
+}

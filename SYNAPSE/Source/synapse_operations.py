@@ -249,223 +249,397 @@
 #     print("\n--- SYNAPSE Phase finished. ---\n")
 
 
+############################################################
 # SYNAPSE/Source/synapse_operations.py
 
+# import torch
+# import torch.nn.functional as F
+# from argparse import Namespace
+# from typing import Any
+# from itertools import combinations
+# import numpy as np
+# from Source.architecture import SparseConv2d, SparseLinear, SparseOutput
+
+# class NeuronSimilarityAnalyzer:
+#     """
+#     ニューロン間の機能的な類似度を計算するクラス。
+#     """
+#     def __init__(self, model: Any, context_detector: Any):
+#         """
+#         Args:
+#             model (Any): 分析対象のネットワークモデル。
+#             context_detector (Any): NICEのContextDetector。代表サンプルの活性化パターンを保持。
+#         """
+#         self.model = model
+#         self.context_detector = context_detector
+#         self.layer_idx_to_name = {i: name for i, (_, name) in enumerate(model.unit_ranks)}
+#         print("NeuronSimilarityAnalyzer is ready.")
+
+#     def calculate_cosine_similarity(self, layer_name: str, neuron_idx1: int, neuron_idx2: int) -> float:
+#         """
+#         指定された層内の2つのニューロンの機能的類似度（コサイン類似度）を計算します。
+#         """
+#         vec1_list, vec2_list = [], []
+
+#         for task_id in self.context_detector.float_context_representations.keys():
+#             for activations_per_sample, _, _ in self.context_detector.float_context_representations[task_id]:
+#                 target_activation = None
+#                 for layer_idx, activation_tensor in activations_per_sample:
+#                     if self.layer_idx_to_name.get(layer_idx) == layer_name:
+#                          target_activation = activation_tensor
+#                          break
+                
+#                 if target_activation is None: continue
+                
+#                 # VGGのようにバッチサイズが1の場合次元を揃える
+#                 if target_activation.dim() == 3:
+#                     target_activation = target_activation.unsqueeze(0)
+                
+#                 if target_activation.dim() < 2: continue
+                
+#                 # neuron_idxが範囲外ならスキップ
+#                 if neuron_idx1 >= target_activation.shape[1] or neuron_idx2 >= target_activation.shape[1]:
+#                     continue
+
+#                 if len(target_activation.shape) == 4:
+#                     act1 = target_activation[:, neuron_idx1, :, :].mean(dim=[1, 2])
+#                     act2 = target_activation[:, neuron_idx2, :, :].mean(dim=[1, 2])
+#                 else:
+#                     act1 = target_activation[:, neuron_idx1]
+#                     act2 = target_activation[:, neuron_idx2]
+                
+#                 vec1_list.append(act1)
+#                 vec2_list.append(act2)
+
+#         if not vec1_list or not vec2_list: return 0.0
+
+#         vec1 = torch.cat(vec1_list)
+#         vec2 = torch.cat(vec2_list)
+        
+#         if torch.all(vec1 == 0) or torch.all(vec2 == 0): return 0.0
+
+#         similarity = F.cosine_similarity(vec1, vec2, dim=0)
+#         return similarity.item()
+
+
+# class StructuralOptimizationController:
+#     """
+#     ニューロンの剪定（Pruning）や共有化（Sharing）といった構造最適化を実行するクラス。
+#     """
+#     def __init__(self, model: Any, args: Namespace):
+#         self.model = model
+#         self.args = args
+#         self.modules_dict = {name: module for name, module in model.named_modules()}
+#         print("StructuralOptimizationController is ready.")
+
+#     def _clear_neuron_connections(self, layer_name: str, neuron_idx: int):
+#         target_module = self.modules_dict.get(layer_name)
+#         if target_module and hasattr(target_module, 'weight'):
+#             with torch.no_grad():
+#                 target_module.weight.data[neuron_idx].zero_()
+#                 if target_module.bias is not None:
+#                     target_module.bias.data[neuron_idx].zero_()
+
+#         found_next_layer = False
+#         module_list = list(self.model.modules())
+#         for i, module in enumerate(module_list):
+#             if module == target_module and i + 1 < len(module_list):
+#                 for next_module in module_list[i+1:]:
+#                     if isinstance(next_module, (SparseConv2d, SparseLinear, SparseOutput)):
+#                         with torch.no_grad():
+#                             if len(next_module.weight.data.shape) == 4:
+#                                 next_module.weight.data[:, neuron_idx, :, :].zero_()
+#                             else:
+#                                 if neuron_idx < next_module.weight.data.shape[1]:
+#                                     next_module.weight.data[:, neuron_idx].zero_()
+#                         found_next_layer = True
+#                         break
+#             if found_next_layer:
+#                 break
+
+#     def prune_and_reinitialize(self, layer_name: str, neuron_idx: int):
+#         print(f"  Executing Pruning for neuron {neuron_idx} in layer {layer_name}...")
+#         self._clear_neuron_connections(layer_name, neuron_idx)
+
+#         target_module = self.modules_dict.get(layer_name)
+#         if target_module and hasattr(target_module, 'weight'):
+#              with torch.no_grad():
+#                 weight_data = target_module.weight.data
+#                 other_neurons_mask = torch.ones(weight_data.size(0), dtype=torch.bool, device=weight_data.device)
+#                 other_neurons_mask[neuron_idx] = False
+                
+#                 if other_neurons_mask.any():
+#                     avg_weight = weight_data[other_neurons_mask].mean(dim=0)
+#                     target_module.weight.data[neuron_idx] = -avg_weight
+        
+#         for i, (ranks, name) in enumerate(self.model.unit_ranks):
+#             if name == layer_name:
+#                 self.model.unit_ranks[i][0][neuron_idx] = 0
+#                 print(f"  >> Neuron {neuron_idx} in {layer_name} has been reset to Immature.")
+#                 break
+
+#     def share_neurons(self, layer_name: str, source_neuron_idx: int, target_neuron_idx: int):
+#         print(f"  Executing Sharing: Merging neuron {source_neuron_idx} into {target_neuron_idx} in layer {layer_name}...")
+#         target_module = self.modules_dict.get(layer_name)
+#         if not (target_module and hasattr(target_module, 'weight')):
+#             return
+
+#         with torch.no_grad():
+#             target_module.weight.data[target_neuron_idx] += target_module.weight.data[source_neuron_idx]
+#             if target_module.bias is not None:
+#                 target_module.bias.data[target_neuron_idx] += target_module.bias.data[source_neuron_idx]
+
+#         found_next_layer = False
+#         module_list = list(self.model.modules())
+#         for i, module in enumerate(module_list):
+#             if module == target_module and i + 1 < len(module_list):
+#                 for next_module in module_list[i+1:]:
+#                     if isinstance(next_module, (SparseConv2d, SparseLinear, SparseOutput)):
+#                         with torch.no_grad():
+#                             if len(next_module.weight.data.shape) == 4:
+#                                 next_module.weight.data[:, target_neuron_idx, :, :] += next_module.weight.data[:, source_neuron_idx, :, :]
+#                             else:
+#                                 if source_neuron_idx < next_module.weight.data.shape[1] and \
+#                                    target_neuron_idx < next_module.weight.data.shape[1]:
+#                                     next_module.weight.data[:, target_neuron_idx] += next_module.weight.data[:, source_neuron_idx]
+#                         found_next_layer = True
+#                         break
+#             if found_next_layer:
+#                 break
+        
+#         self.prune_and_reinitialize(layer_name, source_neuron_idx)
+
+# def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace, episode_index: int):
+#     print(f"\n--- SYNAPSE Phase starting after episode {episode_index} ---")
+    
+#     if episode_index < args.synapse_activation_task_count:
+#         print(f"SYNAPSE is not activated yet. (Current task: {episode_index}, Activation threshold: {args.synapse_activation_task_count})")
+#         return
+
+#     analyzer = NeuronSimilarityAnalyzer(model, context_detector)
+#     controller = StructuralOptimizationController(model, args)
+    
+#     print("Starting layer-wise optimization...")
+#     for layer_idx, (ranks, layer_name) in enumerate(model.unit_ranks):
+#         if layer_idx == 0 or "output" in layer_name: continue
+#         print(f"\n[Layer: {layer_name}]")
+
+#         mature_neurons_by_task = {}
+#         mature_indices = np.where(ranks > 1)[0]
+#         for neuron_idx in mature_indices:
+#             task = model.neuron_birth_task[layer_name].get(neuron_idx)
+#             if task is not None:
+#                 if task not in mature_neurons_by_task:
+#                     mature_neurons_by_task[task] = []
+#                 mature_neurons_by_task[task].append(neuron_idx)
+
+#         print(f"  Found {len(mature_indices)} mature neurons in {len(mature_neurons_by_task)} tasks for Intra-Task Pruning.")
+#         pruned_neurons = []
+#         for task, neurons in mature_neurons_by_task.items():
+#             if len(neurons) < 2: continue
+            
+#             for neuron1, neuron2 in combinations(neurons, 2):
+#                 if neuron1 in pruned_neurons or neuron2 in pruned_neurons: continue
+
+#                 similarity = analyzer.calculate_cosine_similarity(layer_name, neuron1, neuron2)
+                
+#                 if similarity > args.threshold_intra_task_pruning:
+#                     print(f"  >> PRUNING TRIGGERED (Intra-Task): Neurons ({neuron1}, {neuron2}) in task {task}. Similarity: {similarity:.4f}")
+#                     neuron_to_prune = max(neuron1, neuron2)
+#                     controller.prune_and_reinitialize(layer_name, neuron_to_prune)
+#                     pruned_neurons.append(neuron_to_prune)
+
+#         if len(mature_neurons_by_task.keys()) < 2: continue
+
+#         print(f"  Analyzing interactions between {len(mature_neurons_by_task.keys())} tasks for Inter-Task Sharing...")
+#         shared_neurons = list(pruned_neurons)
+#         for (task1, neurons1), (task2, neurons2) in combinations(mature_neurons_by_task.items(), 2):
+#             for n1 in neurons1:
+#                 for n2 in neurons2:
+#                     if n1 in shared_neurons or n2 in shared_neurons: continue
+                    
+#                     similarity = analyzer.calculate_cosine_similarity(layer_name, n1, n2)
+                    
+#                     if similarity > args.threshold_inter_task_sharing:
+#                         print(f"  >> SHARING TRIGGERED (Inter-Task): Neurons ({n1}, {n2}) from tasks ({task1}, {task2}). Similarity: {similarity:.4f}")
+#                         source_neuron = max(n1, n2, key=lambda n: model.neuron_birth_task[layer_name].get(n, -1))
+#                         target_neuron = min(n1, n2, key=lambda n: model.neuron_birth_task[layer_name].get(n, -1))
+                        
+#                         if source_neuron != target_neuron:
+#                             controller.share_neurons(layer_name, source_neuron, target_neuron)
+#                             shared_neurons.extend([source_neuron, target_neuron])
+
+#     print("\n--- SYNAPSE Phase finished. ---\n")
+
+
+################################################
 import torch
 import torch.nn.functional as F
 from argparse import Namespace
-from typing import Any
+from typing import Any, Dict, List
 from itertools import combinations
 import numpy as np
 from Source.architecture import SparseConv2d, SparseLinear, SparseOutput
+from Source.resnet18 import ResNet18, BasicBlock
 
-class NeuronSimilarityAnalyzer:
+class BlockSimilarityAnalyzer:
     """
-    ニューロン間の機能的な類似度を計算するクラス。
+    ResNetのBasicBlock間の機能的な類似度を計算するクラス。
     """
     def __init__(self, model: Any, context_detector: Any):
-        """
-        Args:
-            model (Any): 分析対象のネットワークモデル。
-            context_detector (Any): NICEのContextDetector。代表サンプルの活性化パターンを保持。
-        """
         self.model = model
         self.context_detector = context_detector
-        self.layer_idx_to_name = {i: name for i, (_, name) in enumerate(model.unit_ranks)}
-        print("NeuronSimilarityAnalyzer is ready.")
+        # モデル内の全層の名前とインデックスの対応表
+        self.layer_name_to_idx = {name: i for i, (_, name) in enumerate(model.unit_ranks)}
+        print("BlockSimilarityAnalyzer is ready.")
 
-    def calculate_cosine_similarity(self, layer_name: str, neuron_idx1: int, neuron_idx2: int) -> float:
-        """
-        指定された層内の2つのニューロンの機能的類似度（コサイン類似度）を計算します。
-        """
-        vec1_list, vec2_list = [], []
+    def _get_block_input_activations(self, block: BasicBlock) -> List[torch.Tensor]:
+        """指定されたブロックへの入力となる活性化データを全タスク分集める"""
+        input_activations = []
+        # ブロックの最初の層の名前を取得
+        first_layer_name = block.conv1.layer_name
+        # その層の「前」の層のインデックスを取得
+        input_layer_idx = self.layer_name_to_idx.get(first_layer_name, 1) - 1
+
+        try:
+            layer_num = int(first_layer_name.split('_')[-1])
+            # block1_1のconv1 (conv_early_2) の入力は conv_early_1
+            # shortcut層も考慮し、より安全に一つ前の層のインデックスを取得
+            input_layer_idx = self.layer_name_to_idx.get(f"conv_early_{layer_num - 1}", -1)
+            # block2_1のconv1 (conv_early_6) の入力は block1_2の最終出力 (conv_early_5)
+            if "->" in first_layer_name: # shortcut層の場合
+                input_layer_name = first_layer_name.split('->')[0]
+                input_layer_idx = self.layer_name_to_idx.get(input_layer_name, -1)
+        except (ValueError, IndexError):
+            input_layer_idx = -1
+
+        if input_layer_idx == -1: return []
 
         for task_id in self.context_detector.float_context_representations.keys():
             for activations_per_sample, _, _ in self.context_detector.float_context_representations[task_id]:
-                target_activation = None
                 for layer_idx, activation_tensor in activations_per_sample:
-                    if self.layer_idx_to_name.get(layer_idx) == layer_name:
-                         target_activation = activation_tensor
-                         break
-                
-                if target_activation is None: continue
-                
-                # VGGのようにバッチサイズが1の場合次元を揃える
-                if target_activation.dim() == 3:
-                    target_activation = target_activation.unsqueeze(0)
-                
-                if target_activation.dim() < 2: continue
-                
-                # neuron_idxが範囲外ならスキップ
-                if neuron_idx1 >= target_activation.shape[1] or neuron_idx2 >= target_activation.shape[1]:
-                    continue
+                    if layer_idx == input_layer_idx:
+                        # ★修正点: 4Dテンソルであることを確認して追加
+                        if activation_tensor.dim() == 4:
+                            input_activations.append(activation_tensor)
+                        # もし2Dで保存されていたら、スキップして警告を出す (デバッグ用)
+                        elif activation_tensor.dim() == 2:
+                            print(f"  [SYNAPSE WARNING] Skipping 2D activation tensor for layer {input_layer_idx} intended for a Conv layer.")
 
-                if len(target_activation.shape) == 4:
-                    act1 = target_activation[:, neuron_idx1, :, :].mean(dim=[1, 2])
-                    act2 = target_activation[:, neuron_idx2, :, :].mean(dim=[1, 2])
-                else:
-                    act1 = target_activation[:, neuron_idx1]
-                    act2 = target_activation[:, neuron_idx2]
-                
-                vec1_list.append(act1)
-                vec2_list.append(act2)
-
-        if not vec1_list or not vec2_list: return 0.0
-
-        vec1 = torch.cat(vec1_list)
-        vec2 = torch.cat(vec2_list)
+        return input_activations
+    
+    def calculate_block_similarity(self, block1: BasicBlock, block2: BasicBlock) -> float:
+        """2つのBasicBlockの機能的類似度を計算する"""
+        block1.eval()
+        block2.eval()
         
-        if torch.all(vec1 == 0) or torch.all(vec2 == 0): return 0.0
+        # 2つのブロックで共通の入力データを使う
+        # ここでは簡単のため、block1への入力データをblock2にも流用する
+        input_activations = self._get_block_input_activations(block1)
+        if not input_activations:
+            return 0.0
 
-        similarity = F.cosine_similarity(vec1, vec2, dim=0)
+        output_vecs1, output_vecs2 = [], []
+        with torch.no_grad():
+            for input_tensor in input_activations:
+                # ブロックの出力を計算
+                out1, _, _ = block1(input_tensor)
+                out2, _, _ = block2(input_tensor)
+                
+                # 出力テンソルをベクトル化
+                vec1 = out1.view(out1.size(0), -1)
+                vec2 = out2.view(out2.size(0), -1)
+                output_vecs1.append(vec1)
+                output_vecs2.append(vec2)
+        
+        if not output_vecs1:
+            return 0.0
+
+        # 全サンプルの出力ベクトルを結合
+        vec1_full = torch.cat(output_vecs1)
+        vec2_full = torch.cat(output_vecs2)
+
+        # コサイン類似度を計算
+        similarity = F.cosine_similarity(vec1_full, vec2_full, dim=1).mean()
         return similarity.item()
 
 
 class StructuralOptimizationController:
-    """
-    ニューロンの剪定（Pruning）や共有化（Sharing）といった構造最適化を実行するクラス。
-    """
     def __init__(self, model: Any, args: Namespace):
         self.model = model
         self.args = args
-        self.modules_dict = {name: module for name, module in model.named_modules()}
         print("StructuralOptimizationController is ready.")
 
-    def _clear_neuron_connections(self, layer_name: str, neuron_idx: int):
-        target_module = self.modules_dict.get(layer_name)
-        if target_module and hasattr(target_module, 'weight'):
-            with torch.no_grad():
-                target_module.weight.data[neuron_idx].zero_()
-                if target_module.bias is not None:
-                    target_module.bias.data[neuron_idx].zero_()
-
-        found_next_layer = False
-        module_list = list(self.model.modules())
-        for i, module in enumerate(module_list):
-            if module == target_module and i + 1 < len(module_list):
-                for next_module in module_list[i+1:]:
-                    if isinstance(next_module, (SparseConv2d, SparseLinear, SparseOutput)):
-                        with torch.no_grad():
-                            if len(next_module.weight.data.shape) == 4:
-                                next_module.weight.data[:, neuron_idx, :, :].zero_()
-                            else:
-                                if neuron_idx < next_module.weight.data.shape[1]:
-                                    next_module.weight.data[:, neuron_idx].zero_()
-                        found_next_layer = True
-                        break
-            if found_next_layer:
-                break
-
-    def prune_and_reinitialize(self, layer_name: str, neuron_idx: int):
-        print(f"  Executing Pruning for neuron {neuron_idx} in layer {layer_name}...")
-        self._clear_neuron_connections(layer_name, neuron_idx)
-
-        target_module = self.modules_dict.get(layer_name)
-        if target_module and hasattr(target_module, 'weight'):
-             with torch.no_grad():
-                weight_data = target_module.weight.data
-                other_neurons_mask = torch.ones(weight_data.size(0), dtype=torch.bool, device=weight_data.device)
-                other_neurons_mask[neuron_idx] = False
-                
-                if other_neurons_mask.any():
-                    avg_weight = weight_data[other_neurons_mask].mean(dim=0)
-                    target_module.weight.data[neuron_idx] = -avg_weight
-        
-        for i, (ranks, name) in enumerate(self.model.unit_ranks):
-            if name == layer_name:
-                self.model.unit_ranks[i][0][neuron_idx] = 0
-                print(f"  >> Neuron {neuron_idx} in {layer_name} has been reset to Immature.")
-                break
-
-    def share_neurons(self, layer_name: str, source_neuron_idx: int, target_neuron_idx: int):
-        print(f"  Executing Sharing: Merging neuron {source_neuron_idx} into {target_neuron_idx} in layer {layer_name}...")
-        target_module = self.modules_dict.get(layer_name)
-        if not (target_module and hasattr(target_module, 'weight')):
-            return
-
+    def prune_and_reinitialize_block(self, block_to_prune: BasicBlock):
+        """指定されたブロック内の全ニューロンを剪定・再初期化する"""
+        print(f"  Executing Pruning for block...")
         with torch.no_grad():
-            target_module.weight.data[target_neuron_idx] += target_module.weight.data[source_neuron_idx]
-            if target_module.bias is not None:
-                target_module.bias.data[target_neuron_idx] += target_module.bias.data[source_neuron_idx]
+            for m in block_to_prune.modules():
+                if isinstance(m, (SparseConv2d, nn.BatchNorm2d)):
+                    # Kaiming Heによる初期化
+                    if hasattr(m, 'weight') and m.weight is not None:
+                        nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                    if hasattr(m, 'bias') and m.bias is not None:
+                        nn.init.constant_(m.bias, 0)
 
-        found_next_layer = False
-        module_list = list(self.model.modules())
-        for i, module in enumerate(module_list):
-            if module == target_module and i + 1 < len(module_list):
-                for next_module in module_list[i+1:]:
-                    if isinstance(next_module, (SparseConv2d, SparseLinear, SparseOutput)):
-                        with torch.no_grad():
-                            if len(next_module.weight.data.shape) == 4:
-                                next_module.weight.data[:, target_neuron_idx, :, :] += next_module.weight.data[:, source_neuron_idx, :, :]
-                            else:
-                                if source_neuron_idx < next_module.weight.data.shape[1] and \
-                                   target_neuron_idx < next_module.weight.data.shape[1]:
-                                    next_module.weight.data[:, target_neuron_idx] += next_module.weight.data[:, source_neuron_idx]
-                        found_next_layer = True
+        # ブロック内の全ニューロンのランクをImmature(0)に戻す
+        for m in block_to_prune.modules():
+            if isinstance(m, SparseConv2d):
+                layer_name = m.layer_name
+                for i, (ranks, name) in enumerate(self.model.unit_ranks):
+                    if name == layer_name:
+                        self.model.unit_ranks[i] = (np.zeros_like(ranks), name)
+                        print(f"    >> Neurons in {name} have been reset to Immature.")
                         break
-            if found_next_layer:
-                break
-        
-        self.prune_and_reinitialize(layer_name, source_neuron_idx)
 
 def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace, episode_index: int):
-    print(f"\n--- SYNAPSE Phase starting after episode {episode_index} ---")
-    
+    # (実行条件チェックは同じ)
     if episode_index < args.synapse_activation_task_count:
-        print(f"SYNAPSE is not activated yet. (Current task: {episode_index}, Activation threshold: {args.synapse_activation_task_count})")
+        return
+    
+    # ResNet以外は現在のロジックのまま（何もしない）
+    if not isinstance(model, ResNet18):
+        print("SYNAPSE: Block-level optimization is only implemented for ResNet18.")
         return
 
-    analyzer = NeuronSimilarityAnalyzer(model, context_detector)
+    print(f"\n--- SYNAPSE Block-level Phase starting after episode {episode_index} ---")
+    analyzer = BlockSimilarityAnalyzer(model, context_detector)
     controller = StructuralOptimizationController(model, args)
-    
-    print("Starting layer-wise optimization...")
-    for layer_idx, (ranks, layer_name) in enumerate(model.unit_ranks):
-        if layer_idx == 0 or "output" in layer_name: continue
-        print(f"\n[Layer: {layer_name}]")
 
-        mature_neurons_by_task = {}
-        mature_indices = np.where(ranks > 1)[0]
-        for neuron_idx in mature_indices:
-            task = model.neuron_birth_task[layer_name].get(neuron_idx)
-            if task is not None:
-                if task not in mature_neurons_by_task:
-                    mature_neurons_by_task[task] = []
-                mature_neurons_by_task[task].append(neuron_idx)
+    # 凍結済み（成熟）ブロックをタスクごとに分類
+    mature_blocks_by_task: Dict[int, List[BasicBlock]] = {}
+    for block in model.blocks:
+        # ブロックが成熟しているかを判定（ここではブロック内の最初のconv層のニューロンが1つでも成熟していたら、と仮定）
+        first_layer_name = block.conv1.layer_name
+        is_mature = False
+        task_id = -1
+        for ranks, name in model.unit_ranks:
+            if name == first_layer_name:
+                if np.any(ranks > 1):
+                    is_mature = True
+                    # 多数決でブロックのタスクを決定
+                    mature_indices = np.where(ranks > 1)[0]
+                    tasks = [model.neuron_birth_task[name].get(idx) for idx in mature_indices]
+                    if tasks:
+                        task_id = max(set(tasks), key=tasks.count) # 最頻値
+                break
+        
+        if is_mature and task_id != -1:
+            if task_id not in mature_blocks_by_task:
+                mature_blocks_by_task[task_id] = []
+            mature_blocks_by_task[task_id].append(block)
 
-        print(f"  Found {len(mature_indices)} mature neurons in {len(mature_neurons_by_task)} tasks for Intra-Task Pruning.")
-        pruned_neurons = []
-        for task, neurons in mature_neurons_by_task.items():
-            if len(neurons) < 2: continue
-            
-            for neuron1, neuron2 in combinations(neurons, 2):
-                if neuron1 in pruned_neurons or neuron2 in pruned_neurons: continue
-
-                similarity = analyzer.calculate_cosine_similarity(layer_name, neuron1, neuron2)
-                
-                if similarity > args.threshold_intra_task_pruning:
-                    print(f"  >> PRUNING TRIGGERED (Intra-Task): Neurons ({neuron1}, {neuron2}) in task {task}. Similarity: {similarity:.4f}")
-                    neuron_to_prune = max(neuron1, neuron2)
-                    controller.prune_and_reinitialize(layer_name, neuron_to_prune)
-                    pruned_neurons.append(neuron_to_prune)
-
-        if len(mature_neurons_by_task.keys()) < 2: continue
-
-        print(f"  Analyzing interactions between {len(mature_neurons_by_task.keys())} tasks for Inter-Task Sharing...")
-        shared_neurons = list(pruned_neurons)
-        for (task1, neurons1), (task2, neurons2) in combinations(mature_neurons_by_task.items(), 2):
-            for n1 in neurons1:
-                for n2 in neurons2:
-                    if n1 in shared_neurons or n2 in shared_neurons: continue
-                    
-                    similarity = analyzer.calculate_cosine_similarity(layer_name, n1, n2)
-                    
-                    if similarity > args.threshold_inter_task_sharing:
-                        print(f"  >> SHARING TRIGGERED (Inter-Task): Neurons ({n1}, {n2}) from tasks ({task1}, {task2}). Similarity: {similarity:.4f}")
-                        source_neuron = max(n1, n2, key=lambda n: model.neuron_birth_task[layer_name].get(n, -1))
-                        target_neuron = min(n1, n2, key=lambda n: model.neuron_birth_task[layer_name].get(n, -1))
-                        
-                        if source_neuron != target_neuron:
-                            controller.share_neurons(layer_name, source_neuron, target_neuron)
-                            shared_neurons.extend([source_neuron, target_neuron])
+    # Intra-Task Pruning (同一タスク内のブロック剪定)
+    pruned_blocks = []
+    for task, blocks in mature_blocks_by_task.items():
+        if len(blocks) < 2: continue
+        for block1, block2 in combinations(blocks, 2):
+            similarity = analyzer.calculate_block_similarity(block1, block2)
+            if similarity > args.threshold_intra_task_pruning:
+                print(f"  >> PRUNING CANDIDATE (Intra-Task): Blocks in task {task}. Similarity: {similarity:.4f}")
+                # どちらかを剪定（ここでは単純に2番目のブロック）
+                controller.prune_and_reinitialize_block(block2)
+                pruned_blocks.append(block2)
+                break # 1ペア見つけたら次のタスクへ
 
     print("\n--- SYNAPSE Phase finished. ---\n")

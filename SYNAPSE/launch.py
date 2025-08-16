@@ -8,6 +8,7 @@ from Source import architecture, learner
 if __name__ == "__main__":
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     args = get_argument_parser()
+    args.use_wandb = True  # Ensure W&B is enabled
     
     current_time = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     # print(f'current_TIME:{current_time}')

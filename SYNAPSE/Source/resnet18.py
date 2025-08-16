@@ -79,6 +79,13 @@ class ResNet18(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.output_layer = SparseOutput(int(512 * self.c), output_size, layer_name="output")
 
+        self.blocks = nn.ModuleList([
+            self.block1_1, self.block1_2,
+            self.block2_1, self.block2_2,
+            self.block3_1, self.block3_2,
+            self.block4_1, self.block4_2
+        ])
+
         self.classes_seen_so_far = []
         self.current_young_neurons = [[]] + [list(range(num_units)) for num_units, _ in self.layers[1:]] + [list(range(output_size))]
         self.current_learner_neurons = [[] for _, _ in self.layers]
@@ -95,7 +102,9 @@ class ResNet18(nn.Module):
         self.neuron_birth_task = {name: {} for _, name in self.layers}
         self.neuron_birth_task["output"] = {}
         # =================================================================
-        
+    
+
+    
     def get_units_ranks_dict(self):
         return {name: ranks for ranks, name in self.unit_ranks}
 

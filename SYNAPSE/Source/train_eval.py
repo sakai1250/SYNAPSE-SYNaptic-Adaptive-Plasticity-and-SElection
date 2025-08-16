@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm   
 
 from Source.helper import get_device
+import wandb
 
 
 def test(network: Any, context_detector: Any, data_loader: DataLoader, episode_id=None, return_preds=False) -> float:
@@ -31,11 +32,23 @@ def test(network: Any, context_detector: Any, data_loader: DataLoader, episode_i
     predictions = np.array([int(p) for p in predictions])
     ground_truths = np.array([int(gt) for gt in ground_truths])
     network.train()
+    accuracy = sum(predictions == ground_truths) / len(predictions)
+    
+    # =================================================================
+    # Wandb: テスト精度を記録
+    # =================================================================
+    # wandbが初期化されているかチェック
+    if wandb.run is not None:
+        # TIL評価かCIL評価かを判断してログを分ける
+        log_key = f"Test/acc_til_episode_{episode_id}" if episode_id is not None else "Test/acc_cil"
+        wandb.log({log_key: accuracy})
+    # =================================================================
+    
+    network.train()
     if return_preds:
-        return sum(predictions == ground_truths) / len(predictions), predictions, ground_truths, episode_preds_all # type: ignore
+        return accuracy, predictions, ground_truths, episode_preds_all
     else:
-        return sum(predictions == ground_truths) / len(predictions)
-
+        return accuracy
 
 def phase_training_ce(network: Any, phase_epochs: int,
                       loss: nn.Module, optimizer: ..., train_loader: DataLoader, args: Namespace) -> Any:
@@ -59,9 +72,21 @@ def phase_training_ce(network: Any, phase_epochs: int,
             if network.freeze_masks:
                 network.reset_frozen_gradients()
             optimizer.step()
-        print("Average training loss input: {}".format(
-            sum(epoch_ce_loss) / len(epoch_ce_loss)))
-        print("Average l2 loss: {}".format(
-            sum(epoch_l2_loss) / len(epoch_l2_loss)))
 
+        avg_ce_loss = sum(epoch_ce_loss) / len(epoch_ce_loss)
+        avg_l2_loss = sum(epoch_l2_loss) / len(epoch_l2_loss)
+        
+        # =================================================================
+        # Wandb: 学習損失をエポックごとに記録
+        # =================================================================
+        if wandb.run is not None:
+            wandb.log({
+                "Train/epoch_ce_loss": avg_ce_loss,
+                "Train/epoch_l2_loss": avg_l2_loss,
+                "epoch": epoch
+            })
+        # =================================================================
+        
+        print("Average training loss input: {}".format(avg_ce_loss))
+        print("Average l2 loss: {}".format(avg_l2_loss))
     return network

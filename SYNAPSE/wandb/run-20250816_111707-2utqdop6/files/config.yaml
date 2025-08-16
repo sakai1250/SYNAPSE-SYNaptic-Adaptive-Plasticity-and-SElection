@@ -1,0 +1,117 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    cli_version: 0.13.7
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    python_version: 3.10.9
+    start_time: 1755310627.369546
+    t:
+      1:
+      - 1
+      - 5
+      - 41
+      - 53
+      - 55
+      2:
+      - 1
+      - 5
+      - 41
+      - 53
+      - 55
+      3:
+      - 1
+      - 13
+      - 16
+      - 23
+      4: 3.10.9
+      5: 0.13.7
+      8:
+      - 5
+activation_perc:
+  desc: null
+  value: 95.0
+batch_size:
+  desc: null
+  value: 32
+context_layers:
+  desc: null
+  value:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+context_learner:
+  desc: null
+  value: LogisticRegression(random_state=0, max_iter=20, C=0.005)
+dataset:
+  desc: null
+  value: CIFAR100
+experiment_name:
+  desc: null
+  value: CIFAR100_MEMO1_SEED4
+learning_rate:
+  desc: null
+  value: 0.005
+max_phases:
+  desc: null
+  value: 5
+memo_per_class_context:
+  desc: null
+  value: 50
+model:
+  desc: null
+  value: VGG11_SLIM
+number_of_tasks:
+  desc: null
+  value: 10
+optimizer:
+  desc: null
+  value: SGD
+phase_epochs:
+  desc: null
+  value: 5
+resnet_multiplier:
+  desc: null
+  value: 1.0
+seed:
+  desc: null
+  value: 4
+sgd_momentum:
+  desc: null
+  value: 0.9
+synapse_activation_task_count:
+  desc: null
+  value: 3
+target_immature_pool_ratio:
+  desc: null
+  value: 0.05
+threshold_inter_task_sharing:
+  desc: null
+  value: 0.85
+threshold_intra_task_pruning:
+  desc: null
+  value: 0.9
+use_wandb:
+  desc: null
+  value: true
+wandb_entity:
+  desc: null
+  value: 200442066-名城大学(Meijo Univ.)
+wandb_project:
+  desc: null
+  value: SYNAPSE_CIFAR100_4
+weight_decay:
+  desc: null
+  value: 0.001

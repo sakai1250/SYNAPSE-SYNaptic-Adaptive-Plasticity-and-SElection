@@ -13,6 +13,8 @@ from Source.synapse_operations import run_synapse_optimization
 from tqdm import tqdm
 import os
 
+import wandb
+
 class Learner():
 
     def __init__(self, args: Namespace, network: Any, scenario: GenericCLScenario,
@@ -26,7 +28,18 @@ class Learner():
         self.context_detector = ContextDetector(args, network.penultimate_layer_size, task2classes)
         self.original_scenario = scenario
         print("Model: \n", self.network)
-
+        # =================================================================
+        # Wandb: 
+        # =================================================================
+        if args.use_wandb:
+            wandb.init(
+                project=args.wandb_project,
+                entity=args.wandb_entity,
+                name=f"{args.experiment_name}_seed{args.seed}",
+                config=vars(args)
+            )
+            wandb.watch(self.network, log="all", log_freq=100)
+        # =================================================================
     def start_episode(self, train_episode: TCLExperience, val_episode: TCLExperience, test_episode: TCLExperience, episode_index: int):
         print("****** Starting Episode-{}   Classes: {} ******".format(episode_index, train_episode.classes_in_this_experience))
 

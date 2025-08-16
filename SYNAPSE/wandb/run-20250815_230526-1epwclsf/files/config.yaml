@@ -1,0 +1,124 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    cli_version: 0.13.7
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    python_version: 3.10.9
+    start_time: 1755266726.55653
+    t:
+      1:
+      - 1
+      - 5
+      - 41
+      - 53
+      - 55
+      2:
+      - 1
+      - 5
+      - 41
+      - 53
+      - 55
+      3:
+      - 1
+      - 13
+      - 16
+      - 23
+      4: 3.10.9
+      5: 0.13.7
+      8:
+      - 5
+activation_perc:
+  desc: null
+  value: 97.5
+batch_size:
+  desc: null
+  value: 64
+context_layers:
+  desc: null
+  value:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 18
+context_learner:
+  desc: null
+  value: LogisticRegression(random_state=0, max_iter=25, C=0.001)
+dataset:
+  desc: null
+  value: TinyImagenet
+experiment_name:
+  desc: null
+  value: TinyImagenet_MEMO1_SEED0
+learning_rate:
+  desc: null
+  value: 0.01
+max_phases:
+  desc: null
+  value: 5
+memo_per_class_context:
+  desc: null
+  value: 25
+model:
+  desc: null
+  value: ResNet18
+number_of_tasks:
+  desc: null
+  value: 10
+optimizer:
+  desc: null
+  value: SGD
+phase_epochs:
+  desc: null
+  value: 5
+resnet_multiplier:
+  desc: null
+  value: 1.0
+seed:
+  desc: null
+  value: 0
+sgd_momentum:
+  desc: null
+  value: 0.9
+synapse_activation_task_count:
+  desc: null
+  value: 3
+target_immature_pool_ratio:
+  desc: null
+  value: 0.05
+threshold_inter_task_sharing:
+  desc: null
+  value: 0.85
+threshold_intra_task_pruning:
+  desc: null
+  value: 0.9
+use_wandb:
+  desc: null
+  value: true
+wandb_entity:
+  desc: null
+  value: 200442066-名城大学(Meijo Univ.)
+wandb_project:
+  desc: null
+  value: SYNAPSE_TinyImagenet
+weight_decay:
+  desc: null
+  value: 0.0

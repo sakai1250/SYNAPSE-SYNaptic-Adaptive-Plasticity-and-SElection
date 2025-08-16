@@ -73,6 +73,17 @@ def get_argument_parser() -> argparse.Namespace:
     parser.add_argument('--target_immature_pool_ratio', type=float, default=0.05,
                         help='Target ratio of immature neurons to maintain.')
     # =================================================================
+    
+    # =================================================================
+    # Wandb: 可視化ツール用の設定を追加
+    # =================================================================
+    parser.add_argument('--use_wandb', action='store_true',
+                        help='Enable logging with Weights & Biases.')
+    parser.add_argument('--wandb_project', type=str, default='SYNAPSE_NICE',
+                        help='W&B project name.')
+    parser.add_argument('--wandb_entity', type=str, default='200442066-名城大学(Meijo Univ.)',
+                        help='W&B entity (username or team).')
+    # =================================================================
     return parser.parse_args()
 
 

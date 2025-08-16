@@ -33,3 +33,4 @@ Thumbs.db
 # 出力ディレクトリ
 outputs/
 results/
+wandb/
