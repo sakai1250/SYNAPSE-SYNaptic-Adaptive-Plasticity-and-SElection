@@ -300,7 +300,7 @@ class VGG11_SLIM(CNN_Simple):
         self.unit_ranks = [(np.array(unit_types), name)
                            for unit_types, name in unit_ranks_list]
         # =================================================================
-        # SYNAPSE: ニューロンの所属タスクを記録する辞書を追加
+        # SYNAPSE: ニューロンの所属タスクを記録する辞書
         # 形式: { "レイヤー名": {ニューロンindex: タスクindex} }
         # =================================================================
         self.neuron_birth_task = {name: {} for _, name in self.unit_ranks}

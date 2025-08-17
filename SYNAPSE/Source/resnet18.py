@@ -98,7 +98,7 @@ class ResNet18(nn.Module):
 
         self.unit_ranks.append((np.array([0]*output_size), "output"))  # type: ignore
         # =================================================================
-        # SYNAPSE: ニューロンの所属タスクを記録する辞書を追加
+        # SYNAPSE: ニューロンの所属タスクを記録する辞書
         # 形式: { "レイヤー名": {ニューロンindex: タスクindex} }
         # =================================================================
         self.neuron_birth_task = {name: {} for _, name in self.layers}

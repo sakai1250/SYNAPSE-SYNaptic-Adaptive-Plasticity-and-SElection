@@ -125,37 +125,38 @@ def log_end_of_episode(args: Namespace, network: Any, context_detector: Any, sce
     # =================================================================
     # Wandb: エピソード終了時のサマリーを記録
     # =================================================================
-    if wandb.run is not None:
-        log_metrics = {}
+# =================================================================
+    log_metrics = {}
+    # wandbが有効な場合のみメトリクスを計算
+    if args.use_wandb:
+        # (精度計算のロジックは変更なし)
+        prev_task_accs_til, _, _, _, _, _, _ = acc_prev_tasks(args, context_detector, episode_index, scenario, network, til_eval=True)
+        prev_task_accs_cil, _, _, _, _, _, _ = acc_prev_tasks(args, context_detector, episode_index, scenario, network)
+
         # TIL精度
-        for i, (task_classes, (train_acc, _, test_acc)) in enumerate(prev_task_accs_til, 1):
+        for i, (_, (train_acc, _, test_acc)) in enumerate(prev_task_accs_til, 1):
             log_metrics[f'acc/til_train_task_{i}'] = train_acc
             log_metrics[f'acc/til_test_task_{i}'] = test_acc
         
         # CIL精度
-        avg_cil_acc = np.mean([acc for _, (_, _, acc) in prev_task_accs_cil])
+        avg_cil_acc = np.mean([acc for _, (_, _, acc) in prev_task_accs_cil]) if prev_task_accs_cil else 0.0
         log_metrics['acc/cil_avg_test'] = avg_cil_acc
-        for i, (task_classes, (train_acc, _, test_acc)) in enumerate(prev_task_accs_cil, 1):
-            log_metrics[f'acc/cil_test_task_{i}'] = test_acc
 
         # ニューロンの状態
-        total_neurons = sum([len(u) for u, _ in network.unit_ranks[1:]]) # 入力層を除く
-        immature_count = sum([len((u == 0).nonzero()[0]) for u, _ in network.unit_ranks])
-        
+        total_neurons = sum([len(u) for u, _ in network.unit_ranks[1:]])
+        immature_count = sum([len((u == 0).nonzero()[0]) for u, _ in network.unit_ranks[1:]])
+        learner_count = sum([len((u == 1).nonzero()[0]) for u, _ in network.unit_ranks[1:]])
+        mature_count = sum([len((u > 1).nonzero()[0]) for u, _ in network.unit_ranks[1:]])
         immature_ratio = immature_count / total_neurons if total_neurons > 0 else 0
-        log_metrics['neurons/immature_ratio'] = immature_ratio
-
-        learner_count = sum([len((u == 1).nonzero()[0]) for u, _ in network.unit_ranks])
-        mature_count = sum([len((u > 1).nonzero()[0]) for u, _ in network.unit_ranks])
+        
         log_metrics.update({
-            "neurons/immature": immature_count,
-            "neurons/learner": learner_count,
-            "neurons/mature": mature_count,
+            "neurons/immature_ratio": immature_ratio,
             "neurons/immature_count": immature_count,
+            "neurons/learner_count": learner_count,
+            "neurons/mature_count": mature_count
         })
 
-        wandb.log(log_metrics, step=episode_index)
-     # =================================================================
+    return log_metrics   # =================================================================
 
 def log_end_of_sequence(args: Namespace, network: Any, context_detector: Any, scenario: GenericCLScenario, dirpath: str):
     csvfile = open(os.path.join(dirpath, "End_of_Sequence.csv"), 'w', newline='')

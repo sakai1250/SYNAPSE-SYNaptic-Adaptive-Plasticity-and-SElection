@@ -7,6 +7,7 @@ from avalanche.benchmarks import GenericCLScenario, TCLExperience
 from tqdm import tqdm
 
 import wandb
+import pickle
 from Source.context_detector import ContextDetector
 from Source.helper import get_data_loaders, get_device, random_prune
 from Source.log import (log_end_of_episode, log_end_of_phase,
@@ -16,7 +17,6 @@ from Source.nice_operations import (drop_young_to_learner, grow_all_to_young,
                                     update_freeze_masks)
 from Source.synapse_operations import run_synapse_optimization
 from Source.train_eval import phase_training_ce, test
-
 
 class Learner():
 
@@ -30,18 +30,10 @@ class Learner():
         self.network = random_prune(network.to(get_device()), 0.0)
         self.context_detector = ContextDetector(args, network.penultimate_layer_size, task2classes)
         self.original_scenario = scenario
+        
+        self.all_episode_metrics = []
+        
         print("Model: \n", self.network)
-        # =================================================================
-        # Wandb: 
-        # =================================================================
-        if args.use_wandb:
-            wandb.init(
-                project=args.wandb_project,
-                entity=args.wandb_entity,
-                name=f"{args.experiment_name}_seed{args.seed}",
-                config=vars(args)
-            )
-            wandb.watch(self.network, log="all", log_freq=100)
         # =================================================================
     def start_episode(self, train_episode: TCLExperience, val_episode: TCLExperience, test_episode: TCLExperience, episode_index: int):
         print("****** Starting Episode-{}   Classes: {} ******".format(episode_index, train_episode.classes_in_this_experience))
@@ -52,13 +44,27 @@ class Learner():
         self.network = increase_unit_ranks(self.network)
         self.network = update_freeze_masks(self.network)
         self.network.freeze_bn_layers()
-        log_end_of_episode(self.args, self.network, self.context_detector,
-                           self.original_scenario, episode_index, self.log_dirpath)
+        # log_end_of_episode(self.args, self.network, self.context_detector,
+        #                    self.original_scenario, episode_index, self.log_dirpath)
+        # # =================================================================
+        # # SYNAPSE: 最適化フェーズを実行
+        # # =================================================================
+        # run_synapse_optimization(self.network, self.context_detector, self.args, episode_index)
+        # # =================================================================
+
+        # Step 1: 通常のログメトリクスを取得
+        episode_metrics = log_end_of_episode(self.args, self.network, self.context_detector,
+                                           self.original_scenario, episode_index, self.log_dirpath)
+
+        # Step 2: SYNAPSEを実行し、活動記録メトリクスを取得
+        synapse_metrics = run_synapse_optimization(self.network, self.context_detector, self.args, episode_index, train_episode)
+
         # =================================================================
-        # SYNAPSE: 最適化フェーズを実行
-        # =================================================================
-        run_synapse_optimization(self.network, self.context_detector, self.args, episode_index)
-        # =================================================================
+        # Step 3: 今回のエピソードのメトリクスを結合してリストに追加
+        combined_metrics = {**episode_metrics, **synapse_metrics}
+        self.all_episode_metrics.append(combined_metrics)
+
+
         
     def learn_episode(self, train_episode: TCLExperience, val_episode: TCLExperience, test_episode: TCLExperience, episode_index: int):
         train_loader, val_loader, test_loader = get_data_loaders(self.args, train_episode, val_episode, test_episode, episode_index)
@@ -117,6 +123,12 @@ class Learner():
                 pbar.update(1)
         log_end_of_sequence(self.args, self.network, self.context_detector,
                             self.original_scenario, self.log_dirpath)
+
+        # 全ての学習が終わった後に、蓄積したメトリクスを pkl ファイルとして保存
+        metrics_save_path = os.path.join(self.log_dirpath, "metrics.pkl")
+        with open(metrics_save_path, 'wb') as f:
+            pickle.dump(self.all_episode_metrics, f)
+        print(f"\nAll episode metrics saved to: {metrics_save_path}")
 
     def save_model(self):
         model_save_path = os.path.join(self.log_dirpath, "model.pth")
