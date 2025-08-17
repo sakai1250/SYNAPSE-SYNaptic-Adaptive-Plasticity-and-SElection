@@ -1,10 +1,11 @@
 from argparse import Namespace
+from typing import Any
+
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from typing import Any
-import numpy as np
-from tqdm import tqdm   
+from tqdm import tqdm
 
 from Source.helper import get_device
 

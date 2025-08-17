@@ -1,12 +1,14 @@
-import torch.nn as nn
-from Source.helper import SparseConv2d, SparseLinear, BatchNorm1Custom
-from Source.helper import BatchNorm2Custom, get_device, SparseOutput
-from argparse import Namespace
-from torch.autograd import Function
-from typing import List, Any, Tuple
 import copy
-import torch
+from argparse import Namespace
+from typing import Any, List, Tuple
+
 import numpy as np
+import torch
+import torch.nn as nn
+from torch.autograd import Function
+
+from Source.helper import (BatchNorm1Custom, BatchNorm2Custom, SparseConv2d,
+                           SparseLinear, SparseOutput, get_device)
 
 
 class BasicBlock(nn.Module):

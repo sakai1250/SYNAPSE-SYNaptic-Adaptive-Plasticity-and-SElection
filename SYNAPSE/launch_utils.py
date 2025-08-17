@@ -1,20 +1,22 @@
 import argparse
 import os
 import pickle
-import shutil
 import random
-from typing import Tuple, Dict
+import shutil
+import time
+from typing import Dict, Tuple
 
-from avalanche.benchmarks import GenericCLScenario
-from avalanche.benchmarks.classic import SplitCIFAR10, SplitCIFAR100, SplitFMNIST, SplitMNIST, SplitTinyImageNet
-#from avalanche.benchmarks.generators import benchmark_with_validation_stream, nc_benchmark
-from avalanche.benchmarks import nc_benchmark, benchmark_with_validation_stream #now its 0.5.0 ver for ava...
-from avalanche.benchmarks.datasets import EMNIST
 import numpy as np
 import torch
+#from avalanche.benchmarks.generators import benchmark_with_validation_stream, nc_benchmark
+from avalanche.benchmarks import (  # now its 0.5.0 ver for ava...
+    GenericCLScenario, benchmark_with_validation_stream, nc_benchmark)
+from avalanche.benchmarks.classic import (SplitCIFAR10, SplitCIFAR100,
+                                          SplitFMNIST, SplitMNIST,
+                                          SplitTinyImageNet)
+from avalanche.benchmarks.datasets import EMNIST
 from torch.backends import cudnn
 from torchvision import transforms
-import time
 
 TIME_STAMP = time.strftime('%Y%m%d_%H%M%S', time.localtime())
 DATASET_PATH = os.path.join(os.path.abspath('..'), 'datasets_new')

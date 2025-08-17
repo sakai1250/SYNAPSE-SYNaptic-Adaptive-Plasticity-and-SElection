@@ -1,12 +1,14 @@
+import copy
 from argparse import Namespace
+from typing import Any, List, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.autograd import Function
 from numpy import typing as np_type
-import numpy as np
-from typing import Tuple, List, Any
-import copy
-from Source.helper import get_device, SparseConv2d, SparseLinear, SparseOutput
+from torch.autograd import Function
+
+from Source.helper import SparseConv2d, SparseLinear, SparseOutput, get_device
 from Source.resnet18 import ResNet18
 
 

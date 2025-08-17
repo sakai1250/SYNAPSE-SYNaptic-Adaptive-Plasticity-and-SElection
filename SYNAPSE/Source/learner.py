@@ -1,19 +1,22 @@
-from argparse import Namespace
-from avalanche.benchmarks import GenericCLScenario, TCLExperience
-from typing import Dict, Any
-import torch
-from Source.helper import random_prune, get_device, get_data_loaders
-from Source.context_detector import ContextDetector
-from Source.nice_operations import increase_unit_ranks, update_freeze_masks, select_learner_units
-from Source.nice_operations import drop_young_to_learner, grow_all_to_young
-from Source.log import log_end_of_episode, log_end_of_sequence, log_end_of_phase
-from Source.train_eval import test, phase_training_ce
-from Source.synapse_operations import run_synapse_optimization
-
-from tqdm import tqdm
 import os
+from argparse import Namespace
+from typing import Any, Dict
+
+import torch
+from avalanche.benchmarks import GenericCLScenario, TCLExperience
+from tqdm import tqdm
 
 import wandb
+from Source.context_detector import ContextDetector
+from Source.helper import get_data_loaders, get_device, random_prune
+from Source.log import (log_end_of_episode, log_end_of_phase,
+                        log_end_of_sequence)
+from Source.nice_operations import (drop_young_to_learner, grow_all_to_young,
+                                    increase_unit_ranks, select_learner_units,
+                                    update_freeze_masks)
+from Source.synapse_operations import run_synapse_optimization
+from Source.train_eval import phase_training_ce, test
+
 
 class Learner():
 

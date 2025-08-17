@@ -1,13 +1,14 @@
 from argparse import Namespace
+from typing import Any
+
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from typing import Any
-import numpy as np
-from tqdm import tqdm   
+from tqdm import tqdm
 
-from Source.helper import get_device
 import wandb
+from Source.helper import get_device
 
 
 def test(network: Any, context_detector: Any, data_loader: DataLoader, episode_id=None, return_preds=False) -> float:

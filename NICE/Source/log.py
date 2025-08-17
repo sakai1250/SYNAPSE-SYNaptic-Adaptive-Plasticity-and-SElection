@@ -1,15 +1,17 @@
-from argparse import Namespace
-from avalanche.benchmarks import GenericCLScenario
-from typing import Any, List, Tuple
-import os
 import csv
+import os
+import pickle
+from argparse import Namespace
+from typing import Any, List, Tuple
+
 import torch
-from Source.train_eval import test
+from avalanche.benchmarks import GenericCLScenario
+from torch.utils.data import DataLoader
+from torchsummary import summary
+
 from Source.helper import get_data_loaders, get_device, reduce_or_flat_convs
 from Source.resnet18 import ResNet18
-from torch.utils.data import DataLoader
-import pickle
-from torchsummary import summary
+from Source.train_eval import test
 
 
 def group_list_using_l1(l1, l2):

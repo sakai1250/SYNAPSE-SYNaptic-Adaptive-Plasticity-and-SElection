@@ -1,12 +1,12 @@
 from argparse import Namespace
+from typing import Any, Optional, Tuple
+
+import numpy as np
 import torch
-from torch.autograd import Variable
-from typing import Tuple, Optional, Any
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 from avalanche.benchmarks import TCLExperience
-
+from torch.autograd import Variable
 #from avalanche.benchmarks import TCLExperience
 # from avalanche.benchmarks.scenarios.deprecated.benchmark_wrapper_utils import TCLExperience
 from torch.utils.data import DataLoader

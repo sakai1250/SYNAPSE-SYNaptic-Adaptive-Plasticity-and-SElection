@@ -1,11 +1,13 @@
-from typing import List, Any
+import copy
+from typing import Any, List
+
 import numpy as np
 import torch
-import copy
-from Source.helper import get_device
-from Source.architecture import SparseConv2d, SparseLinear, SparseOutput
-from Source.resnet18 import ResNet18
 from torch.utils.data import DataLoader
+
+from Source.architecture import SparseConv2d, SparseLinear, SparseOutput
+from Source.helper import get_device
+from Source.resnet18 import ResNet18
 
 
 def get_current_young_neurons(unit_ranks: List) -> List:

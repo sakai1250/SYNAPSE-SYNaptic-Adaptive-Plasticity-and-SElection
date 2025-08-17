@@ -1,9 +1,9 @@
 import os
 import time
-from launch_utils import get_argument_parser, get_experience_streams
-from launch_utils import set_seeds, create_log_dirs
-from Source import architecture, learner
 
+from launch_utils import (create_log_dirs, get_argument_parser,
+                          get_experience_streams, set_seeds)
+from Source import architecture, learner
 
 if __name__ == "__main__":
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"

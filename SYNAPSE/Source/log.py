@@ -1,18 +1,19 @@
-from argparse import Namespace
-from avalanche.benchmarks import GenericCLScenario
-from typing import Any, List, Tuple
-import os
 import csv
-import torch
-from Source.train_eval import test
-from Source.helper import get_data_loaders, get_device, reduce_or_flat_convs
-from Source.resnet18 import ResNet18
-from torch.utils.data import DataLoader
+import os
 import pickle
+from argparse import Namespace
+from typing import Any, List, Tuple
+
+import numpy as np
+import torch
+from avalanche.benchmarks import GenericCLScenario
+from torch.utils.data import DataLoader
 from torchsummary import summary
 
 import wandb
-import numpy as np
+from Source.helper import get_data_loaders, get_device, reduce_or_flat_convs
+from Source.resnet18 import ResNet18
+from Source.train_eval import test
 
 
 def group_list_using_l1(l1, l2):
@@ -138,13 +139,19 @@ def log_end_of_episode(args: Namespace, network: Any, context_detector: Any, sce
             log_metrics[f'acc/cil_test_task_{i}'] = test_acc
 
         # ニューロンの状態
+        total_neurons = sum([len(u) for u, _ in network.unit_ranks[1:]]) # 入力層を除く
         immature_count = sum([len((u == 0).nonzero()[0]) for u, _ in network.unit_ranks])
+        
+        immature_ratio = immature_count / total_neurons if total_neurons > 0 else 0
+        log_metrics['neurons/immature_ratio'] = immature_ratio
+
         learner_count = sum([len((u == 1).nonzero()[0]) for u, _ in network.unit_ranks])
         mature_count = sum([len((u > 1).nonzero()[0]) for u, _ in network.unit_ranks])
         log_metrics.update({
             "neurons/immature": immature_count,
             "neurons/learner": learner_count,
-            "neurons/mature": mature_count
+            "neurons/mature": mature_count,
+            "neurons/immature_count": immature_count,
         })
 
         wandb.log(log_metrics, step=episode_index)

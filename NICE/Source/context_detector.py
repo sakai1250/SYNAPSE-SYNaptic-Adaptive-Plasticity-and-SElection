@@ -1,16 +1,17 @@
+import copy
 from argparse import Namespace
 from typing import Any, Dict, List
-import torch
-from Source.helper import get_device, reduce_or_flat_convs
-import numpy as np
-import copy
-from torch.utils.data import DataLoader, Subset
-import torch.nn.functional as F
 
+import numpy as np
+import torch
+import torch.nn.functional as F
 # Do not delete the following import line, it is needed for the correct functioning of the code
 from sklearn.linear_model import LogisticRegression
-
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
+
+from Source.helper import get_device, reduce_or_flat_convs
+
 
 def inv_dict(d):
     return {vi: k for k, v in d.items() for vi in v}
