@@ -1,4 +1,5 @@
 import os
+import pickle
 from argparse import Namespace
 from typing import Any, Dict
 
@@ -9,7 +10,7 @@ from tqdm import tqdm
 from Source.context_detector import ContextDetector
 from Source.helper import get_data_loaders, get_device, random_prune
 from Source.log import (log_end_of_episode, log_end_of_phase,
-                        log_end_of_sequence)
+                        log_end_of_sequence, log_end_of_sequence)
 from Source.nice_operations import (drop_young_to_learner, grow_all_to_young,
                                     increase_unit_ranks, select_learner_units,
                                     update_freeze_masks)
@@ -28,6 +29,7 @@ class Learner():
         self.network = random_prune(network.to(get_device()), 0.0)
         self.context_detector = ContextDetector(args, network.penultimate_layer_size, task2classes)
         self.original_scenario = scenario
+        self.all_episode_metrics = []
         print("Model: \n", self.network)
 
     def start_episode(self, train_episode: TCLExperience, val_episode: TCLExperience, test_episode: TCLExperience, episode_index: int):
@@ -39,9 +41,12 @@ class Learner():
         self.network = increase_unit_ranks(self.network)
         self.network = update_freeze_masks(self.network)
         self.network.freeze_bn_layers()
-        log_end_of_episode(self.args, self.network, self.context_detector,
-                           self.original_scenario, episode_index, self.log_dirpath)
-
+        # log_end_of_episode(self.args, self.network, self.context_detector,
+        #                    self.original_scenario, episode_index, self.log_dirpath)
+        episode_metrics = log_end_of_episode(self.args, self.network, self.context_detector,
+                                           self.original_scenario, episode_index, self.log_dirpath)
+        self.all_episode_metrics.append(episode_metrics)
+        
     def learn_episode(self, train_episode: TCLExperience, val_episode: TCLExperience, test_episode: TCLExperience, episode_index: int):
         train_loader, val_loader, test_loader = get_data_loaders(self.args, train_episode, val_episode, test_episode, episode_index)
         phase_index = 1
@@ -99,7 +104,12 @@ class Learner():
                 pbar.update(1)
         log_end_of_sequence(self.args, self.network, self.context_detector,
                             self.original_scenario, self.log_dirpath)
-
+        
+        metrics_save_path = os.path.join(self.log_dirpath, "metrics.pkl")
+        with open(metrics_save_path, 'wb') as f:
+            pickle.dump(self.all_episode_metrics, f)
+        print(f"\nAll episode metrics saved to: {metrics_save_path}")
+        
     def save_model(self):
         model_save_path = os.path.join(self.log_dirpath, "model.pth")
         torch.save(self.network.state_dict(), model_save_path)

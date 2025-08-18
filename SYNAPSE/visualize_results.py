@@ -11,6 +11,9 @@ import pandas as pd
 import torch  # torchをインポート
 from sklearn.manifold import TSNE
 
+"""
+python3 visualize_results.py "/media/blackie/8000GB_blackie/SYNAPSE-SYNaptic-Adaptive-Plasticity-and-SElection/NICE/Logs/20250818_214636/CIFAR100_MEMO1_SEED0"
+"""
 
 def plot_metrics(df, save_dir):
     """

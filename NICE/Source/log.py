@@ -8,6 +8,7 @@ import torch
 from avalanche.benchmarks import GenericCLScenario
 from torch.utils.data import DataLoader
 from torchsummary import summary
+import numpy as np
 
 from Source.helper import get_data_loaders, get_device, reduce_or_flat_convs
 from Source.resnet18 import ResNet18
@@ -70,23 +71,23 @@ def acc_prev_tasks(args: Namespace, context_detector: Any, task_index: int,
     return all_accuracies, all_preds, all_trues, all_episode_preds, all_episode_preds_train,  all_episode_train_gts, all_episode_gts
 
 
-def log_end_of_episode(args: Namespace, network: Any, context_detector: Any, scenario: GenericCLScenario, episode_index: int, dirpath: str):
+def log_end_of_episode(args: Namespace, network: Any, context_detector: Any, scenario: GenericCLScenario, episode_index: int, dirpath: str) -> dict:
     dirpath = os.path.join(dirpath, "Episode_{}".format(episode_index))
     csvfile = open(os.path.join(dirpath, "Episode_{}.csv".format(episode_index)), 'w', newline='')
     writer = csv.writer(csvfile)
     writer = write_units(writer, network)
     # TIL
-    prev_task_accs, _, _, _, _, _, _ = acc_prev_tasks(args, context_detector, episode_index, scenario, network, til_eval=True)
+    prev_task_accs_til, _, _, _, _, _, _ = acc_prev_tasks(args, context_detector, episode_index, scenario, network, til_eval=True)
     writer.writerow(["Task Incremental Learning"])
-    for task_classes, (train_acc, val_acc, test_acc) in prev_task_accs:
+    for task_classes, (train_acc, val_acc, test_acc) in prev_task_accs_til:
         writer.writerow([str(task_classes), "Train Acc: {:.2f}".format(train_acc),
                          "Val Acc: {:.2f}".format(val_acc), "Test Acc: {:.2f}".format(test_acc)])
 
     # CIL
-    prev_task_accs, test_predictions, test_gts, all_episode_preds, all_episode_preds_train, all_episode_train_gts, all_episode_gts = acc_prev_tasks(
+    prev_task_accs_cil, test_predictions, test_gts, all_episode_preds, all_episode_preds_train, all_episode_train_gts, all_episode_gts = acc_prev_tasks(
         args, context_detector, episode_index, scenario, network)
     writer.writerow(["Class Incremental Learning"])
-    for task_classes, (train_acc, val_acc, test_acc) in prev_task_accs:
+    for task_classes, (train_acc, val_acc, test_acc) in prev_task_accs_cil:
         writer.writerow([str(task_classes), "Train Acc: {:.2f}".format(train_acc),
                         "Val Acc: {:.2f}".format(val_acc), "Test Acc: {:.2f}".format(test_acc)])
 
@@ -120,6 +121,34 @@ def log_end_of_episode(args: Namespace, network: Any, context_detector: Any, sce
     with open(os.path.join(dirpath, 'context_detector.pkl'), 'wb') as f:
         pickle.dump(context_detector, f)
 
+    log_metrics = {}
+    
+    # TIL精度
+    for i, (task_classes, (train_acc, _, test_acc)) in enumerate(prev_task_accs_til, 1):
+        log_metrics[f'acc/til_train_task_{i}'] = train_acc
+        log_metrics[f'acc/til_test_task_{i}'] = test_acc
+    
+    # CIL精度
+    avg_cil_acc = np.mean([acc for _, (_, _, acc) in prev_task_accs_cil]) if prev_task_accs_cil else 0.0
+    log_metrics['acc/cil_avg_test'] = avg_cil_acc
+    for i, (task_classes, (train_acc, _, test_acc)) in enumerate(prev_task_accs_cil, 1):
+        log_metrics[f'acc/cil_test_task_{i}'] = test_acc
+
+    # ニューロンの状態
+    total_neurons = sum([len(u) for u, _ in network.unit_ranks[1:]])
+    immature_count = sum([len((u == 0).nonzero()[0]) for u, _ in network.unit_ranks[1:]])
+    learner_count = sum([len((u == 1).nonzero()[0]) for u, _ in network.unit_ranks[1:]])
+    mature_count = sum([len((u > 1).nonzero()[0]) for u, _ in network.unit_ranks[1:]])
+    immature_ratio = immature_count / total_neurons if total_neurons > 0 else 0
+    
+    log_metrics.update({
+        "neurons/immature_ratio": immature_ratio,
+        "neurons/immature_count": immature_count,
+        "neurons/learner_count": learner_count,
+        "neurons/mature_count": mature_count
+    })
+
+    return log_metrics
 
 def log_end_of_sequence(args: Namespace, network: Any, context_detector: Any, scenario: GenericCLScenario, dirpath: str):
     csvfile = open(os.path.join(dirpath, "End_of_Sequence.csv"), 'w', newline='')

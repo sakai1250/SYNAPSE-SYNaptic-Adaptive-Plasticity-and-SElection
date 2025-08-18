@@ -310,6 +310,18 @@ def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace,
     analyzer = BlockSimilarityAnalyzer(model, context_detector, train_episode, args)
     controller = StructuralOptimizationController(model, args)
 
+    # =================================================================
+    # ★変更点: 比較可能なブロックのグループを定義
+    # =================================================================
+    compatible_block_groups = [
+        [model.block1_1, model.block1_2],
+        [model.block2_2], # チャンネル数が変わるブロックは単独
+        [model.block3_2],
+        [model.block4_2]
+    ]
+    # =================================================================
+
+
     synapse_metrics = {
         'synapse/pruned_blocks': 0,
         'synapse/shared_blocks': 0 
@@ -334,19 +346,39 @@ def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace,
                 mature_blocks_by_task[task_id] = []
             mature_blocks_by_task[task_id].append(block)
 
-    # --- 1. Intra-Task Pruning (同一タスク内の剪定) ---
+    # # --- 1. Intra-Task Pruning (同一タスク内の剪定) ---
+    # pruned_blocks = []
+    # for task, blocks in mature_blocks_by_task.items():
+    #     if len(blocks) < 2: continue
+    #     for block1, block2 in combinations(blocks, 2):
+    #         if any(b in pruned_blocks for b in [block1, block2]): continue
+    #         similarity = analyzer.calculate_block_similarity(block1, block2)
+    #         if similarity > args.threshold_intra_task_pruning:
+    #             print(f"  >> PRUNING TRIGGERED (Intra-Task): Blocks in task {task}. Similarity: {similarity:.4f}")
+    #             controller.prune_and_reinitialize_block(block2)
+    #             pruned_blocks.append(block2)
+    #             synapse_metrics['synapse/pruned_blocks'] += 1
+    #             break 
+
+    # --- Intra-Task Pruning ---
     pruned_blocks = []
-    for task, blocks in mature_blocks_by_task.items():
-        if len(blocks) < 2: continue
-        for block1, block2 in combinations(blocks, 2):
-            if any(b in pruned_blocks for b in [block1, block2]): continue
-            similarity = analyzer.calculate_block_similarity(block1, block2)
-            if similarity > args.threshold_intra_task_pruning:
-                print(f"  >> PRUNING TRIGGERED (Intra-Task): Blocks in task {task}. Similarity: {similarity:.4f}")
-                controller.prune_and_reinitialize_block(block2)
-                pruned_blocks.append(block2)
-                synapse_metrics['synapse/pruned_blocks'] += 1
-                break 
+    # ★変更点: グループ内で比較
+    for group in compatible_block_groups:
+        for task, blocks_in_task in mature_blocks_by_task.items():
+            # 現在のグループに属する、このタスクのブロックを抽出
+            relevant_blocks = [b for b in blocks_in_task if b in group]
+            if len(relevant_blocks) < 2: continue
+            
+            for block1, block2 in combinations(relevant_blocks, 2):
+                if any(b in pruned_blocks for b in [block1, block2]): continue
+                similarity = analyzer.calculate_block_similarity(block1, block2)
+                if similarity > args.threshold_intra_task_pruning:
+                    print(f"  >> PRUNING TRIGGERED (Intra-Task): Blocks in task {task}. Similarity: {similarity:.4f}")
+                    controller.prune_and_reinitialize_block(block2)
+                    pruned_blocks.append(block2)
+                    synapse_metrics['synapse/pruned_blocks'] += 1
+                    break
+
 
     # =================================================================
     # Inter-Task Sharing (異種タスク間の共有化)
@@ -354,30 +386,58 @@ def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace,
     if len(mature_blocks_by_task) > 1:
         print("  Analyzing interactions between tasks for Inter-Task Sharing...")
         shared_blocks = list(pruned_blocks) # 剪定済みブロックは共有化の対象外
-        
-        # 異なるタスクのブロックペアを全て評価
-        for (task1, blocks1), (task2, blocks2) in combinations(mature_blocks_by_task.items(), 2):
-            for b1 in blocks1:
-                if b1 in shared_blocks: continue
-                for b2 in blocks2:
-                    if b2 in shared_blocks: continue
+        # ... (既存のロジックを、同様にグループ内で比較するように修正) ...
+        for group in compatible_block_groups:
+            # 異なるタスクのブロックペアを全て評価
+            for (task1, blocks1), (task2, blocks2) in combinations(mature_blocks_by_task.items(), 2):
+                # 各タスクから、現在のグループに属するブロックを抽出
+                relevant_blocks1 = [b for b in blocks1 if b in group and b not in shared_blocks]
+                relevant_blocks2 = [b for b in blocks2 if b in group and b not in shared_blocks]
 
-                    similarity = analyzer.calculate_block_similarity(b1, b2)
-                    if similarity > args.threshold_inter_task_sharing:
-                        print(f"  >> SHARING TRIGGERED (Inter-Task): Blocks from tasks ({task1}, {task2}). Similarity: {similarity:.4f}")
+                for b1 in relevant_blocks1:
+                    for b2 in relevant_blocks2:
+                        if b1 in shared_blocks or b2 in shared_blocks: continue
+
+                        similarity = analyzer.calculate_block_similarity(b1, b2)
+                        if similarity > args.threshold_inter_task_sharing:
+                            print(f"  >> SHARING TRIGGERED (Inter-Task): Blocks from tasks ({task1}, {task2}). Similarity: {similarity:.4f}")
+                            
+                            # より新しいタスクのブロックをsource、古い方をtargetとする
+                            if task1 > task2:
+                                source_block, target_block = b1, b2
+                            else:
+                                source_block, target_block = b2, b1
+                            
+                            controller.share_blocks(source_block, target_block)
+                            shared_blocks.extend([source_block, target_block])
+                            synapse_metrics['synapse/shared_blocks'] += 1
+                            break # このペアの処理は終了
+                    if b1 in shared_blocks:
+                        break
+                            
+        # # 異なるタスクのブロックペアを全て評価
+        # for (task1, blocks1), (task2, blocks2) in combinations(mature_blocks_by_task.items(), 2):
+        #     for b1 in blocks1:
+        #         if b1 in shared_blocks: continue
+        #         for b2 in blocks2:
+        #             if b2 in shared_blocks: continue
+
+        #             similarity = analyzer.calculate_block_similarity(b1, b2)
+        #             if similarity > args.threshold_inter_task_sharing:
+        #                 print(f"  >> SHARING TRIGGERED (Inter-Task): Blocks from tasks ({task1}, {task2}). Similarity: {similarity:.4f}")
                         
-                        # より新しいタスクのブロックをsource、古い方をtargetとする
-                        if task1 > task2:
-                            source_block, target_block = b1, b2
-                        else:
-                            source_block, target_block = b2, b1
+        #                 # より新しいタスクのブロックをsource、古い方をtargetとする
+        #                 if task1 > task2:
+        #                     source_block, target_block = b1, b2
+        #                 else:
+        #                     source_block, target_block = b2, b1
                         
-                        controller.share_blocks(source_block, target_block)
-                        shared_blocks.extend([source_block, target_block])
-                        synapse_metrics['synapse/shared_blocks'] += 1
-                        break # このペアの処理は終了
-                if b1 in shared_blocks:
-                    break
+        #                 controller.share_blocks(source_block, target_block)
+        #                 shared_blocks.extend([source_block, target_block])
+        #                 synapse_metrics['synapse/shared_blocks'] += 1
+        #                 break # このペアの処理は終了
+        #         if b1 in shared_blocks:
+        #             break
     # =================================================================
 
     print("\n--- SYNAPSE Phase finished. ---\n")
