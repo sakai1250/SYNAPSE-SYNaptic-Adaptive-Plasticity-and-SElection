@@ -29,6 +29,7 @@ def plot_metrics(df, save_dir):
     plt.legend()
     plt.savefig(save_dir / 'accuracy_and_forgetting.png')
     plt.close()
+    print(f"Accuracy plot saved in: {save_dir / 'accuracy_and_forgetting.png'}")
 
     # グラフ2: 未熟ニューロンの割合
     if 'neurons/immature_ratio' in df.columns:
@@ -40,6 +41,9 @@ def plot_metrics(df, save_dir):
         plt.grid(True, which='both', linestyle='--')
         plt.savefig(save_dir / 'immature_ratio.png')
         plt.close()
+        print(f"Immature neuron ratio plot saved in: {save_dir / 'immature_ratio.png'}")
+    else:
+        print("Immature neuron ratio plot could not be created.")
 
     # グラフ3: SYNAPSEの活動
     if 'synapse/pruned_blocks' in df.columns:
@@ -55,7 +59,10 @@ def plot_metrics(df, save_dir):
         plt.legend()
         plt.savefig(save_dir / 'synapse_activity.png')
         plt.close()
-    
+        print(f"SYNAPSE activity plot saved in: {save_dir / 'synapse_activity.png'}")
+    else:
+        print("SYNAPSE activity plot could not be created.")
+
     print(f"Metrics plots saved in: {save_dir}")
 
 def plot_tsne(log_dir, save_dir):
@@ -125,7 +132,7 @@ if __name__ == '__main__':
             df_metrics = pd.DataFrame(all_metrics_data)
             df_metrics['episode'] = range(1, len(df_metrics) + 1)
             
-            # ★★★ CSVファイルとして保存 ★★★
+            # CSVファイルとして保存
             csv_save_path = log_path / 'metrics.csv'
             df_metrics.to_csv(csv_save_path, index=False)
             print(f"Successfully converted metrics and saved to: {csv_save_path}")

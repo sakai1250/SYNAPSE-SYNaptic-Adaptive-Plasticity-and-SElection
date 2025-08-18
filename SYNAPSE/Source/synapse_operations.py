@@ -197,6 +197,7 @@ from Source.architecture import SparseConv2d, SparseLinear, SparseOutput
 from Source.resnet18 import ResNet18, BasicBlock
 from avalanche.benchmarks import TCLExperience
 from Source.context_detector import get_n_samples_per_class
+from Source.helper import get_device
 
 
 class BlockSimilarityAnalyzer:

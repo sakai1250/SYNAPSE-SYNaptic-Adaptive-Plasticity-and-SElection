@@ -141,6 +141,9 @@ def log_end_of_episode(args: Namespace, network: Any, context_detector: Any, sce
         # CIL精度
         avg_cil_acc = np.mean([acc for _, (_, _, acc) in prev_task_accs_cil]) if prev_task_accs_cil else 0.0
         log_metrics['acc/cil_avg_test'] = avg_cil_acc
+        for i, (_, (train_acc, _, test_acc)) in enumerate(prev_task_accs_cil, 1):
+            log_metrics[f'acc/cil_train_task_{i}'] = train_acc
+            log_metrics[f'acc/cil_test_task_{i}'] = test_acc
 
         # ニューロンの状態
         total_neurons = sum([len(u) for u, _ in network.unit_ranks[1:]])
