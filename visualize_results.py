@@ -12,7 +12,7 @@ import torch  # torchをインポート
 from sklearn.manifold import TSNE
 
 """
-python3 visualize_results.py "/media/blackie/8000GB_blackie/SYNAPSE-SYNaptic-Adaptive-Plasticity-and-SElection/SYNAPSE/Logs/CIFAR100/20250818_003646_CIFAR100_MEMO1_SEED1"
+python3 visualize_results.py "/media/blackie/8000GB_blackie/SYNAPSE-SYNaptic-Adaptive-Plasticity-and-SElection/SYNAPSE/Logs/20250818_235932/CIFAR100_MEMO1_SEED0"
 """
 
 def plot_metrics(df, save_dir):
