@@ -262,33 +262,37 @@ class ResNet18(nn.Module):
         x = self.relu(x)
         activations.append(x.detach().cpu())
 
-        # =================================================================
-        # ★変更点: 各ブロックの最終出力 'x' もactivationsリストに追加する
-        # =================================================================
         x, x2, x1 = self.block1_1(x)
-        activations.extend([x1.detach().cpu(), x2.detach().cpu(), x.detach().cpu()])
+        activations.append(x1.detach().cpu())
+        activations.append(x2.detach().cpu())
 
         x, x2, x1 = self.block1_2(x)
-        activations.extend([x1.detach().cpu(), x2.detach().cpu(), x.detach().cpu()])
+        activations.append(x1.detach().cpu())
+        activations.append(x2.detach().cpu())
 
         x, x2, x1 = self.block2_1(x)
-        activations.extend([x1.detach().cpu(), x2.detach().cpu(), x.detach().cpu()])
+        activations.append(x1.detach().cpu())
+        activations.append(x2.detach().cpu())
 
         x, x2, x1 = self.block2_2(x)
-        activations.extend([x1.detach().cpu(), x2.detach().cpu(), x.detach().cpu()])
+        activations.append(x1.detach().cpu())
+        activations.append(x2.detach().cpu())
 
         x, x2, x1 = self.block3_1(x)
-        activations.extend([x1.detach().cpu(), x2.detach().cpu(), x.detach().cpu()])
+        activations.append(x1.detach().cpu())
+        activations.append(x2.detach().cpu())
 
         x, x2, x1 = self.block3_2(x)
-        activations.extend([x1.detach().cpu(), x2.detach().cpu(), x.detach().cpu()])
+        activations.append(x1.detach().cpu())
+        activations.append(x2.detach().cpu())
 
         x, x2, x1 = self.block4_1(x)
-        activations.extend([x1.detach().cpu(), x2.detach().cpu(), x.detach().cpu()])
+        activations.append(x1.detach().cpu())
+        activations.append(x2.detach().cpu())
 
         x, x2, x1 = self.block4_2(x)
-        activations.extend([x1.detach().cpu(), x2.detach().cpu(), x.detach().cpu()])
-        # =================================================================
+        activations.append(x1.detach().cpu())
+        activations.append(x2.detach().cpu())
 
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
@@ -298,54 +302,6 @@ class ResNet18(nn.Module):
         if return_output:
             return activations[-1], activations  # type: ignore
         return activations
-
-    # def get_activations(self, x: torch.Tensor, return_output=False) -> List:
-    #     activations = [x.detach().cpu()]
-    #     x = self.conv1(x)
-    #     x = self.bn1(x)
-    #     x = self.relu(x)
-    #     activations.append(x.detach().cpu())
-
-    #     x, x2, x1 = self.block1_1(x)
-    #     activations.append(x1.detach().cpu())
-    #     activations.append(x2.detach().cpu())
-
-    #     x, x2, x1 = self.block1_2(x)
-    #     activations.append(x1.detach().cpu())
-    #     activations.append(x2.detach().cpu())
-
-    #     x, x2, x1 = self.block2_1(x)
-    #     activations.append(x1.detach().cpu())
-    #     activations.append(x2.detach().cpu())
-
-    #     x, x2, x1 = self.block2_2(x)
-    #     activations.append(x1.detach().cpu())
-    #     activations.append(x2.detach().cpu())
-
-    #     x, x2, x1 = self.block3_1(x)
-    #     activations.append(x1.detach().cpu())
-    #     activations.append(x2.detach().cpu())
-
-    #     x, x2, x1 = self.block3_2(x)
-    #     activations.append(x1.detach().cpu())
-    #     activations.append(x2.detach().cpu())
-
-    #     x, x2, x1 = self.block4_1(x)
-    #     activations.append(x1.detach().cpu())
-    #     activations.append(x2.detach().cpu())
-
-    #     x, x2, x1 = self.block4_2(x)
-    #     activations.append(x1.detach().cpu())
-    #     activations.append(x2.detach().cpu())
-
-    #     x = self.avgpool(x)
-    #     x = x.view(x.size(0), -1)
-
-    #     x = self.output_layer(x)
-    #     activations.append(copy.deepcopy(x.detach().cpu()))
-    #     if return_output:
-    #         return activations[-1], activations  # type: ignore
-    #     return activations
 
     def reset_frozen_gradients(self):
         ranks_dict = self.get_units_ranks_dict()

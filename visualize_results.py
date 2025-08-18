@@ -12,7 +12,7 @@ import torch  # torchをインポート
 from sklearn.manifold import TSNE
 
 """
-python3 visualize_results.py "/media/blackie/8000GB_blackie/SYNAPSE-SYNaptic-Adaptive-Plasticity-and-SElection/NICE/Logs/20250818_214636/CIFAR100_MEMO1_SEED0"
+python3 visualize_results.py "/media/blackie/8000GB_blackie/SYNAPSE-SYNaptic-Adaptive-Plasticity-and-SElection/SYNAPSE/Logs/CIFAR100/20250818_003646_CIFAR100_MEMO1_SEED1"
 """
 
 def plot_metrics(df, save_dir):
@@ -116,6 +116,90 @@ def plot_tsne(log_dir, save_dir):
     except Exception as e:
         print(f"An error occurred during t-SNE plotting: {e}")
 
+def _collect_task_series(df_row, prefix):
+    """
+    例: prefix='acc/cil_test_task_' なら acc/cil_test_task_1,2,... を拾う。
+    戻り値: (task_ids(list[int]), scores(list[float]))
+    """
+    cols = [c for c in df_row.index if c.startswith(prefix)]
+    # タスク番号でソート
+    pairs = []
+    for c in cols:
+        try:
+            tid = int(c.split(prefix)[1])
+        except Exception:
+            continue
+        val = df_row[c]
+        if pd.notna(val):
+            pairs.append((tid, float(val)))
+    pairs.sort(key=lambda x: x[0])
+    task_ids = [p[0] for p in pairs]
+    scores = [p[1] for p in pairs]
+    return task_ids, scores
+
+def _plot_bar(task_ids, scores, title, save_path):
+    plt.figure(figsize=(12, 6))
+    x = np.arange(len(task_ids))
+    plt.bar(x, scores)
+    plt.xticks(x, [f"T{t}" for t in task_ids], rotation=0)
+    plt.ylabel('Accuracy')
+    plt.title(title)
+    plt.grid(True, axis='y', linestyle='--', alpha=0.5)
+    # 目盛りを0〜1の想定で適宜
+    plt.ylim(0, 1.0)
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Saved: {save_path}")
+
+def export_final_task_bars_and_csv(df_metrics, save_dir):
+    """
+    metrics.csvの最終エピソード行から、CIL/TILのタスク別精度を棒グラフ化し、CSVにも保存。
+    画像: cil_task_accuracy_final.png / til_task_accuracy_final.png
+    CSV : cil_task_accuracy_final.csv  / til_task_accuracy_final.csv
+    """
+    if 'episode' not in df_metrics.columns or len(df_metrics) == 0:
+        print("Error: metrics DataFrame is empty or lacks 'episode' column.")
+        return
+
+    # 最終エピソード行を特定
+    max_ep = int(df_metrics['episode'].max())
+    final_row = df_metrics.loc[df_metrics['episode'] == max_ep].iloc[0]
+
+    # CIL
+    cil_tasks, cil_scores = _collect_task_series(final_row, prefix='acc/cil_test_task_')
+    if len(cil_tasks) > 0:
+        # 図
+        _plot_bar(
+            cil_tasks,
+            cil_scores,
+            title=f'CIL Task-wise Accuracy (Episode {max_ep})',
+            save_path=save_dir / 'cil_task_accuracy_final.png'
+        )
+        # CSV
+        cil_df = pd.DataFrame({'task': cil_tasks, 'accuracy': cil_scores})
+        cil_csv = save_dir / 'cil_task_accuracy_final.csv'
+        cil_df.to_csv(cil_csv, index=False)
+        print(f"Saved: {cil_csv}")
+    else:
+        print("No CIL per-task columns found (prefix 'acc/cil_test_task_').")
+
+    # TIL
+    til_tasks, til_scores = _collect_task_series(final_row, prefix='acc/til_test_task_')
+    if len(til_tasks) > 0:
+        _plot_bar(
+            til_tasks,
+            til_scores,
+            title=f'TIL Task-wise Accuracy (Episode {max_ep})',
+            save_path=save_dir / 'til_task_accuracy_final.png'
+        )
+        til_df = pd.DataFrame({'task': til_tasks, 'accuracy': til_scores})
+        til_csv = save_dir / 'til_task_accuracy_final.csv'
+        til_df.to_csv(til_csv, index=False)
+        print(f"Saved: {til_csv}")
+    else:
+        print("No TIL per-task columns found (prefix 'acc/til_test_task_').")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Visualize SYNAPSE experiment results and convert metrics to CSV.")
@@ -147,6 +231,9 @@ if __name__ == '__main__':
             print(f"An error occurred while processing {metrics_file}: {e}")
     else:
         print(f"Error: metrics.pkl not found in {log_path}")
+
+    # --- 最終エピソードのタスク別精度（CIL/TIL）を棒グラフ＆CSVで保存 ---
+    export_final_task_bars_and_csv(df_metrics, log_path)
 
     # --- 活性化データ（activation.pkl）をt-SNEで可視化 ---
     plot_tsne(log_path, log_path)
