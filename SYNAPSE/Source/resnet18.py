@@ -92,17 +92,25 @@ class ResNet18(nn.Module):
         self.current_young_neurons = [[]] + [list(range(num_units)) for num_units, _ in self.layers[1:]] + [list(range(output_size))]
         self.current_learner_neurons = [[] for _, _ in self.layers]
         self.freeze_masks = []
-        self.unit_ranks = [(np.array([999]*self.input_size), "conv_early_0")]
-        for num_units, layer_name in self.layers[1:]:
-            self.unit_ranks.append((np.array([0]*num_units), layer_name))
 
-        self.unit_ranks.append((np.array([0]*output_size), "output"))  # type: ignore
+        # 旧: self.unit_ranks = [(np.array([999]*self.input_size), "conv_early_0")]
+        # 新: タスクIDのリストで管理するように変更
+        self.unit_ranks = [ ([], "conv_early_0") ] # 入力層は空リスト
+        for num_units, layer_name in self.layers[1:]:
+            # 全てのニューロンを未熟（空リスト）として初期化
+            self.unit_ranks.append( ([[] for _ in range(num_units)], layer_name) )
+
+        self.unit_ranks.append( ([[] for _ in range(output_size)], "output") )
+        # ▼ neuron_birth_task 辞書は不要になったため削除 ▼
+        # self.neuron_birth_task = {name: {} for _, name in self.layers}
+        # self.neuron_birth_task["output"] = {}
+       # self.unit_ranks.append((np.array([0]*output_size), "output"))  # type: ignore
         # =================================================================
         # SYNAPSE: ニューロンの所属タスクを記録する辞書
         # 形式: { "レイヤー名": {ニューロンindex: タスクindex} }
         # =================================================================
-        self.neuron_birth_task = {name: {} for _, name in self.layers}
-        self.neuron_birth_task["output"] = {}
+        #self.neuron_birth_task = {name: {} for _, name in self.layers}
+        #self.neuron_birth_task["output"] = {}
         # =================================================================
     
 

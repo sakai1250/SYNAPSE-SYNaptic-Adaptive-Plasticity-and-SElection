@@ -121,7 +121,11 @@ class ContextDetector():
                 context_masks = []
                 for index, activation in context_layer_activations:
                     activation = activation.detach().cpu()
-                    context_masks.append((network.unit_ranks[index][0] > 0, index))
+                    # context_detector.py の push_activations 関数内
+                    # ニューロンのランク（タスクIDのリスト）が空でないか(bool(r)で判定)をチェックする
+                    ranks_for_layer = network.unit_ranks[index][0]
+                    mask = np.array([bool(r) for r in ranks_for_layer])
+                    context_masks.append((mask, index))
                     quantized_activations.append(self.layer_binarizers[index].quantize(activation))
 
                 episodes_float_context_representations.append((context_layer_activations, class_, is_conv))

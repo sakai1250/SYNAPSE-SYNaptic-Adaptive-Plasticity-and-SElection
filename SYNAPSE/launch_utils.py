@@ -66,14 +66,26 @@ def get_argument_parser() -> argparse.Namespace:
     # =================================================================
     # SYNAPSE: 追加するハイパーパラメータ
     # =================================================================
-    parser.add_argument('--threshold_intra_task_pruning', type=float, default=0.9,
-                        help='Threshold for pruning similar neurons within the same task.')
-    parser.add_argument('--threshold_inter_task_sharing', type=float, default=0.85,
-                        help='Threshold for sharing similar neurons across different tasks.')
+    #parser.add_argument('--threshold_intra_task_pruning', type=float, default=0.9,
+     #                   help='Threshold for pruning similar neurons within the same task.')
+    #parser.add_argument('--threshold_inter_task_sharing', type=float, default=0.85,
+      #                  help='Threshold for sharing similar neurons across different tasks.')
+    #parser.add_argument('--synapse_activation_task_count', type=int, default=3,
+    #                    help='The number of tasks after which SYNAPSE starts.')
+   # parser.add_argument('--target_immature_pool_ratio', type=float, default=0.05,
+        #                help='Target ratio of immature neurons to maintain.')
+    # 以下の2行を削除
+    # parser.add_argument('--threshold_intra_task_pruning', type=float, default=0.9,
+    #                     help='Threshold for pruning similar neurons within the same task.')
+    # parser.add_argument('--threshold_inter_task_sharing', type=float, default=0.85,
+    #                     help='Threshold for sharing similar neurons across different tasks.')
+    
+    # 以下の1行を target_immature_pool_ratio に一本化
+    parser.add_argument('--target_immature_pool_ratio', type=float, default=0.1,
+                        help='Target ratio of immature neurons to maintain for plasticity. Default: 0.1 (10%)')
+    
     parser.add_argument('--synapse_activation_task_count', type=int, default=3,
                         help='The number of tasks after which SYNAPSE starts.')
-    parser.add_argument('--target_immature_pool_ratio', type=float, default=0.05,
-                        help='Target ratio of immature neurons to maintain.')
     # =================================================================
     
     # =================================================================
