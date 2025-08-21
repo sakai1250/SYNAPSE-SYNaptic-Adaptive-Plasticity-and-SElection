@@ -719,7 +719,7 @@ def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace,
     total_neurons = 0
     immature_neurons = 0
     # 入力層(0)と出力層(-1)を除く
-    for ranks, _ in model.unit_ranks[1:-1]:
+    for ranks in model.unit_ranks[1:-1]:
         total_neurons += len(ranks)
         immature_neurons += sum(1 for r in ranks if not r)
     

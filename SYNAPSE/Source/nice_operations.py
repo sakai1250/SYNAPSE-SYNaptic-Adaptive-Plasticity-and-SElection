@@ -188,12 +188,121 @@ def select_learner_units_resnet(network: Any, stable_selection_perc, train_episo
 
 
 def grow_all_to_young(network: Any) -> Any:
-    # この関数は古い接続マスクベースのため、新しいシステムでは再設計が必要
-    # ここでは何もしないように変更し、エラーを防ぐ
-    print("  [INFO] grow_all_to_young is currently disabled for the new rank system.")
+    """
+    次の層の未熟ニューロンへの接続をすべて有効化（成長）させる。
+    """
+    if isinstance(network, ResNet18):
+        # TODO: ResNet用のロジックを実装
+        print("  [INFO] grow_all_to_young for ResNet is not yet implemented.")
+        return network
+
+    # 現在の未熟ニューロンのインデックスを取得
+    all_young_indices = get_current_young_neurons(network.unit_ranks)
+    
+    module_list = [m for m in network.modules() if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput))]
+
+    # 各層をループして接続マスクを更新
+    for i, module in enumerate(module_list):
+        # 次の層の未熟ニューロンのインデックスを取得
+        # 注意: all_young_indicesはunit_ranksに対応し、unit_ranksは学習可能層のみ。
+        # iが最後の層を指す場合、次の層はないのでスキップ
+        if i + 1 >= len(all_young_indices):
+            continue
+            
+        next_layer_young_idx = all_young_indices[i + 1]
+        if not next_layer_young_idx:
+            continue # 次に未熟ニューロンがなければ何もしない
+
+        weight_mask, bias_mask = module.get_mask()
+        
+        # 次の層の未熟ニューロンに対応する行のマスクをすべて1にする
+        weight_mask[next_layer_young_idx, :] = 1
+        
+        # 対応するバイアスマスクも有効化
+        bias_mask[next_layer_young_idx] = 1
+
+        module.set_mask(weight_mask, bias_mask)
+
+    return network
+
+# SYNAPSE/Source/nice_operations.py
+
+def grow_all_to_young(network: Any) -> Any:
+    """
+    次の層の未熟ニューロンへの接続をすべて有効化（成長）させる。
+    """
+    if isinstance(network, ResNet18):
+        print("  [INFO] grow_all_to_young for ResNet is not yet implemented.")
+        return network
+
+    all_young_indices = get_current_young_neurons(network.unit_ranks)
+    module_list = [m for m in network.modules() if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput))]
+
+    for i, module in enumerate(module_list):
+        if i + 1 >= len(all_young_indices):
+            continue
+            
+        next_layer_young_idx = all_young_indices[i + 1]
+        if not next_layer_young_idx:
+            continue
+
+        weight_mask, bias_mask = module.get_mask()
+        
+        # ★★★ 修正箇所 ★★★
+        # Linear層(2D)とConv層(4D)で処理を分岐
+        if weight_mask.dim() == 4: # Conv層の場合
+            # 対応する出力チャンネルの全フィルターを有効化
+            weight_mask[next_layer_young_idx, :, :, :] = 1
+        else: # Linear層の場合
+            weight_mask[next_layer_young_idx, :] = 1
+        
+        bias_mask[next_layer_young_idx] = 1
+        module.set_mask(weight_mask, bias_mask)
+
     return network
 
 def drop_young_to_learner(network: Any) -> Any:
-    # この関数も同様に再設計が必要
-    print("  [INFO] drop_young_to_learner is currently disabled for the new rank system.")
+    """
+    現在の層の未熟ニューロンから、次の層の成熟済みニューロンへの接続を削除する。
+    """
+    if isinstance(network, ResNet18):
+        print("  [INFO] drop_young_to_learner for ResNet is not yet implemented.")
+        return network
+
+    all_young_indices = get_current_young_neurons(network.unit_ranks)
+    
+    mature_neurons_per_layer = []
+    for ranks in network.unit_ranks:
+        mature_indices = [idx for idx, r in enumerate(ranks) if r]
+        mature_neurons_per_layer.append(mature_indices)
+
+    module_list = [m for m in network.modules() if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput))]
+
+    for i, module in enumerate(module_list):
+        current_layer_young_idx = all_young_indices[i]
+        
+        if i + 1 >= len(mature_neurons_per_layer):
+            continue
+        next_layer_mature_idx = mature_neurons_per_layer[i + 1]
+
+        if not current_layer_young_idx or not next_layer_mature_idx:
+            continue
+
+        weight_mask, bias_mask = module.get_mask()
+
+        # ★★★ 修正箇所 ★★★
+        # np.ix_はNumPy配列用。PyTorchテンソルには直接使えないため、PyTorchのインデックス機能を使う
+        rows = torch.tensor(next_layer_mature_idx, dtype=torch.long)
+        cols = torch.tensor(current_layer_young_idx, dtype=torch.long)
+
+        if weight_mask.dim() == 4: # Conv層の場合
+             for r in rows:
+                 for c in cols:
+                     weight_mask[r, c, :, :] = 0
+        else: # Linear層の場合
+            # ブロードキャストを利用して効率的に選択
+            weight_mask[rows.unsqueeze(1), cols] = 0
+
+        module.set_mask(weight_mask, bias_mask)
+
     return network
