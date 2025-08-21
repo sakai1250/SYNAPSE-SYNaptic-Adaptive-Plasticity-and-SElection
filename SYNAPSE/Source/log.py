@@ -157,6 +157,7 @@ def log_end_of_episode(args: Namespace, network: Any, context_detector: Any, sce
 
         # ニューロンの総数を計算
         total_count = sum(len(layer) for layer in relevant_layers)
+        immature_ratio = immature_count / total_count if total_count > 0 else 0
         log_metrics.update({
             "neurons/immature_ratio": immature_ratio,
             "neurons/immature_count": immature_count,

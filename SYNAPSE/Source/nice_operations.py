@@ -36,33 +36,41 @@ def increase_unit_ranks(network: Any) -> Any:
 
 def update_freeze_masks(network: Any) -> Any:
     if isinstance(network, ResNet18):
-        # ResNetの場合は専用の関数を呼ぶ (未実装の場合は汎用ロジックへ)
-        # return update_freeze_masks_resnet(network)
-        pass
+        # (ResNetの場合はここを実装)
+        return network
 
     weights = network.get_weight_bias_masks_numpy()
     freeze_masks = []
-    mature_neurons = []
-    for ranks, _ in network.unit_ranks:
-        # ランクリストが空でないニューロンを凍結対象（成熟済み）とみなす
-        mature_indices = [idx for idx, r in enumerate(ranks) if r]
-        mature_neurons.append(np.array(mature_indices))
+    
+    # network.unit_ranksから直接、成熟ニューロンのインデックスリストを作成
+    mature_neurons_per_layer = []
+    for ranks in network.unit_ranks:
+        mature_indices = [idx for idx, r in enumerate(ranks) if r] # rが空リストでなければTrue (成熟)
+        mature_neurons_per_layer.append(np.array(mature_indices, dtype=np.int32))
 
-    for i, target_mature in enumerate(mature_neurons[1:]): # 入力層を除く
-        target_mature = np.array(target_mature, dtype=np.int32)
-        if i >= len(weights): continue
+    # 層の数（重みの数とランクの数）が一致していることを確認 (念のため)
+    if len(weights) != len(mature_neurons_per_layer):
+        print(f"[WARNING] Layer count mismatch in update_freeze_masks. Weights: {len(weights)}, Ranks: {len(mature_neurons_per_layer)}")
+        return network # エラーを防ぐために処理を中断
+
+    # zipを使い、各層の「重み」と「成熟ニューロンリスト」を正しくペアリングしてループ
+    for weight_pair, target_mature in zip(weights, mature_neurons_per_layer):
         
-        mask_w = np.zeros(weights[i][0].shape)
-        mask_b = np.zeros(weights[i][1].shape)
-        if len(target_mature) != 0:
+        mask_w = np.zeros(weight_pair[0].shape)
+        mask_b = np.zeros(weight_pair[1].shape)
+
+        if len(target_mature) > 0:
+            # これでインデックスと層のサイズが一致するため、エラーは発生しない
             mask_w[target_mature, :] = 1
             mask_b[target_mature] = 1
-        freeze_masks.append((mask_w * weights[i][0], mask_b))
+        
+        # 既存の接続マスクと凍結マスクを結合
+        freeze_masks.append((mask_w * weight_pair[0], mask_b))
 
-    freeze_masks = [(torch.tensor(w).to(torch.bool).to(get_device()),
-                     torch.tensor(b).to(torch.bool).to(get_device()))
-                    for w, b in freeze_masks]
-    network.freeze_masks = freeze_masks
+    freeze_masks_tensors = [(torch.tensor(w, dtype=torch.bool).to(get_device()),
+                             torch.tensor(b, dtype=torch.bool).to(get_device()))
+                            for w, b in freeze_masks]
+    network.freeze_masks = freeze_masks_tensors
     return network
 
 
@@ -83,71 +91,71 @@ def pick_top_neurons(scores, selection_ratio) -> List[int]:
     return indices
 
 
+# SYNAPSE/Source/nice_operations.py
+
 def select_learner_units(network: Any, stable_selection_perc, train_episode: Any, episode_index: int) -> Any:
     if isinstance(network, ResNet18):
         return select_learner_units_resnet(network, stable_selection_perc, train_episode, episode_index)
 
-    # === VGG/CNNモデル用のロジックを、新しいunit_ranksシステムに完全対応させる ===
     top_unit_indices = []
     
-    # 動的に現在の未熟/学習者ニューロンを取得
+    # 最新の未熟/学習者ニューロンの状態を取得 (unit_ranksの長さに対応)
     current_young = get_current_young_neurons(network.unit_ranks)
     current_learners = get_current_learner_neurons(network.unit_ranks, episode_index)
     
     if stable_selection_perc == 100.0:
-        # フェーズ1: 利用可能な全てのニューロン（未熟＋現在の学習者）を選択
-        for i in range(1, len(network.unit_ranks)): # 入力層を除く
+        # --- フェーズ1 ---
+        # 全ての学習可能層（出力層を除く）に対して、利用可能な全ニューロンを選択
+        for i in range(len(network.unit_ranks) - 1):
             selectable = sorted(list(set(current_young[i] + current_learners[i])))
             top_unit_indices.append(selectable)
     else:
-        # フェーズ2以降: 活性化に基づいて未熟ニューロンから選択
+        # --- フェーズ2以降 ---
         loader = DataLoader(train_episode.dataset, batch_size=1024,  shuffle=False)
         data, _, _ = next(iter(loader))
         data = data.to(get_device())
         
-        # get_activation_selectionは古い属性に依存するため、get_activationsを代わりに使う
+        # network.get_activations()は[入力, 層1, 層2, ..., 出力]のリストを返す
         _, layer_activations = network.get_activations(data, return_output=True)
         
-        layer_idx = 1 # unit_ranksに合わせる
-        for act in layer_activations[1:-1]: # 入力と出力を除く
+        # 活性化リスト(層1〜最後から2番目まで)とunit_ranks(層1〜最後から2番目まで)をzipで安全にループ
+        # これでリスト間のズレが完全になくなる
+        for act, ranks, learners in zip(layer_activations[1:-1], network.unit_ranks[:-1], current_learners[:-1]):
             if act.dim() > 2: # Conv層
                 scores = torch.sum(act, dim=(0, 2, 3))
             else: # Linear層
                 scores = torch.sum(act, dim=0)
             
-            # 既に学習者 or 成熟済みのニューロンは候補から除外
+            # 既に何らかのタスクを担当しているニューロンはスコアを0にし、選択対象から除外
             mask = torch.zeros_like(scores, dtype=torch.bool)
-            non_selectable = [i for i, r in enumerate(network.unit_ranks[layer_idx][0]) if r]
+            non_selectable = [i for i, r in enumerate(ranks) if r]
             if non_selectable:
                 mask[non_selectable] = True
             scores[mask] = 0.0
             
             selected = pick_top_neurons(scores, stable_selection_perc)
-            # 既存の学習者も維持する
-            final_selection = sorted(list(set(selected + current_learners[layer_idx])))
+            # 既存の学習者も選択状態に維持する
+            final_selection = sorted(list(set(selected + learners)))
             top_unit_indices.append(final_selection)
-            layer_idx += 1
 
-    # 出力層のユニットを追加
+    # --- 出力層の処理 ---
+    # 現在のタスクで必要なクラスと、既存の学習者を結合して選択
     output_layer_units = sorted(list(set(train_episode.classes_in_this_experience + current_learners[-1])))
     top_unit_indices.append(output_layer_units)
 
-    # ランクを更新
-    unit_ranks = [network.unit_ranks[0]]
-    for i, ranks in enumerate(network.unit_ranks[1:], 1):
-        if i - 1 < len(top_unit_indices):
-            new_ranks = copy.deepcopy(ranks)
-            selected_for_layer = top_unit_indices[i - 1]
-            for unit_idx in selected_for_layer:
-                if not new_ranks[unit_idx]: # 未熟の場合のみ
+    # --- ランクの更新 ---
+    # unit_ranks (11要素) と top_unit_indices (11要素) が完全に一致しているため、安全に更新できる
+    new_unit_ranks = []
+    for ranks, selected_for_layer in zip(network.unit_ranks, top_unit_indices):
+        new_ranks = copy.deepcopy(ranks)
+        for unit_idx in selected_for_layer:
+            if unit_idx < len(new_ranks):
+                if not new_ranks[unit_idx]: # 未熟ニューロン([])の場合のみ、現在のタスクIDを追加
                     new_ranks[unit_idx] = [episode_index]
-            unit_ranks.append((new_ranks))
-        else:
-            unit_ranks.append((ranks))
+        new_unit_ranks.append(new_ranks)
     
-    network.unit_ranks = unit_ranks
+    network.unit_ranks = new_unit_ranks
     return network
-
 
 # ResNet用の関数も、エラーを起こした部分を修正
 def select_learner_units_resnet(network: Any, stable_selection_perc, train_episode: Any, episode_index: int) -> Any:

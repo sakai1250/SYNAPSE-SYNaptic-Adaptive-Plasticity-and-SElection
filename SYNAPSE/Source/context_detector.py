@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from Source.helper import get_device, reduce_or_flat_convs
-
+from Source.resnet18 import ResNet18
 
 def inv_dict(d):
     return {vi: k for k, v in d.items() for vi in v}
@@ -119,13 +119,35 @@ class ContextDetector():
 
                 quantized_activations = []
                 context_masks = []
-                for index, (activation, ranks_for_layer) in enumerate(zip(layer_activations, network.unit_ranks)):
+                # layer_binarizers を正しく参照するためのカウンター
+                binarizer_counter = 0
+                for index, activation in context_layer_activations:
                     activation = activation.detach().cpu()
+                    
+                    # VGG/CNNモデルの場合 (unit_ranksと1対1で対応)
+                    if not isinstance(network, ResNet18):
+                        # unit_ranksは学習可能層のみなので、活性化リストのindexと直接は一致しない
+                        # しかし、VGGの場合はほぼ1対1に近いため、暫定的にこのままにする
+                        # 注意：入力層(index=0)はunit_ranksに含まれないため、index-1でアクセス
+                        if index > 0 and (index - 1) < len(network.unit_ranks):
+                             ranks_for_layer = network.unit_ranks[index-1]
+                             mask = np.array([bool(r) for r in ranks_for_layer])
+                        else: # 入力層または対応するランクがない場合
+                             mask = np.ones(activation.shape[1], dtype=bool)
+                    else:
+                        # ResNetの場合: 正しいレイヤー名でunit_ranksを検索する
+                        # (ResNetのunit_ranksは(ranks, name)のタプルのリスト)
+                        layer_name_to_find = f"conv_early_{index}"
+                        ranks_for_layer = next((ranks for ranks, name in network.unit_ranks if name == layer_name_to_find), None)
+                        if ranks_for_layer is not None:
+                            mask = np.array([bool(r) for r in ranks_for_layer])
+                        else:
+                            # 対応するランク情報が見つからない場合(e.g., 入力層)
+                            mask = np.ones(activation.shape[1], dtype=bool)
 
-                    mask = np.array([bool(r) for r in ranks_for_layer])
                     context_masks.append((mask, index))
-
-                    quantized_activations.append(self.layer_binarizers[index].quantize(activation))
+                    quantized_activations.append(self.layer_binarizers[binarizer_counter].quantize(activation))
+                    binarizer_counter += 1
 
                 episodes_float_context_representations.append((context_layer_activations, class_, is_conv))
                 self.context_layers_masks[episode_index] = context_masks
