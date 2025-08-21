@@ -211,7 +211,7 @@ def drop_young_to_learner(network: Any) -> Any:
         weight_mask, _ = module.get_mask() # bias_maskは変更しないので不要
 
         # =================================================================
-        # === 修正箇所: 2D/4Dテンソルに対応した、より安全なインデックス指定 ===
+        # =2D/4Dテンソルに対応した、より安全なインデックス指定 ===
         # =================================================================
         rows = torch.tensor(next_layer_mature_idx, dtype=torch.long)
         cols = torch.tensor(current_layer_young_idx, dtype=torch.long)
