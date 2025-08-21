@@ -84,7 +84,7 @@ def get_argument_parser() -> argparse.Namespace:
     parser.add_argument('--target_immature_pool_ratio', type=float, default=0.1,
                         help='Target ratio of immature neurons to maintain for plasticity. Default: 0.1 (10%)')
     
-    parser.add_argument('--synapse_activation_task_count', type=int, default=3,
+    parser.add_argument('--synapse_activation_task_count', type=int, default=2,
                         help='The number of tasks after which SYNAPSE starts.')
     # =================================================================
     

@@ -267,61 +267,46 @@ class VGG11_SLIM(CNN_Simple):
         self.penultimate_layer_size = 1024
         self.conv_layers_early.append(nn.Identity())
         self.conv_layers_late.extend([
-            SparseConv2d(3, 32, kernel_size=3, padding=1, layer_name="conv_late"),
+            SparseConv2d(3, 32, kernel_size=3, padding=1, layer_name="conv_late_1"),
             nn.ReLU(inplace=True),
-            SparseConv2d(32, 64, kernel_size=3, padding=1, layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            SparseConv2d(64, 128, kernel_size=3, padding=1,layer_name="conv_late"),
-            nn.ReLU(inplace=True),
-            SparseConv2d(128, 128, kernel_size=3, padding=1, layer_name="conv_late"),
+            SparseConv2d(32, 64, kernel_size=3, padding=1, layer_name="conv_late_2"),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            SparseConv2d(128, 256, kernel_size=3, padding=1, layer_name="conv_late"),
+            SparseConv2d(64, 128, kernel_size=3, padding=1,layer_name="conv_late_3"),
             nn.ReLU(inplace=True),
-            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_late"),
+            SparseConv2d(128, 128, kernel_size=3, padding=1, layer_name="conv_late_4"),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_late"),
+            SparseConv2d(128, 256, kernel_size=3, padding=1, layer_name="conv_late_5"),
             nn.ReLU(inplace=True),
-            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_late"),
+            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_late_6"),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_late_7"),
+            nn.ReLU(inplace=True),
+            SparseConv2d(256, 256, kernel_size=3, padding=1, layer_name="conv_late_8"),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
         ])
         self.hidden_linear.extend([
-            SparseLinear(self.conv2lin_size, 1024, layer_name="linear"), nn.ReLU(),
+            SparseLinear(self.conv2lin_size, 1024, layer_name="linear_1"), nn.ReLU(),
         ])
-        self.penultimate_layer = nn.ModuleList([SparseLinear(1024, 1024, layer_name="linear"), nn.ReLU()])
+        self.penultimate_layer = nn.ModuleList([SparseLinear(1024, 1024, layer_name="linear_2"), nn.ReLU()])
         self.output_layer = SparseOutput(1024, output_size, layer_name="output")
         if self.output_size == 100:
             self._initialize_weights()
 
         self.freeze_masks = []
         
-        # === 新しい形式で unit_ranks を正しく初期化 ===
-        #unit_ranks_list = [([], "input")]
-        # # モデルの実際の層をイテレートしてunit_ranksを構築
-        # for m in self.modules():
-        #     if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput)):
-        #         num_units = m.weight.data.shape[0]
-        #         unit_ranks_list.append( ([[] for _ in range(num_units)], m.layer_name) )
-        # self.unit_ranks = unit_ranks_list
-        
-        layer_output_sizes = []
-        # self.modules() を使ってモデル内の全レイヤーを探索
-        for module in self.modules():
-            # あなたのカスタムレイヤーと出力層を正しく判定
-            if isinstance(module, (SparseConv2d, SparseLinear, SparseOutput)):
-                # レイヤーの重みテンソルの形状から出力ユニット数を取得
-                num_units = module.weight.shape[0]
-                layer_output_sizes.append(num_units)
+        # ### 修正箇所 2: unit_ranks の初期化方法を他のモデルと統一 ###
+        unit_ranks_list = [([[] for _ in range(3)], "input")] # CIFARの入力チャンネル数は3
+        for m in self.modules():
+            if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput)):
+                num_units = m.weight.data.shape[0]
+                unit_ranks_list.append( ([[] for _ in range(num_units)], m.layer_name) )
+        self.unit_ranks = unit_ranks_list
 
-        # 全てのニューロンを「未熟」状態（空のリスト）で初期化
-        self.unit_ranks = [
-            [[] for _ in range(size)] for size in layer_output_sizes
-        ]
-        print(f"[DEBUG] VGG11_SLIM initialized. unit_ranks length: {len(self.unit_ranks)}")
-
+    
 class CNN_MNIST(CNN_Simple):
     def __init__(self, args: Namespace, input_size: int, output_size: int) -> None:
         super(CNN_MNIST, self).__init__(args, input_size, output_size)

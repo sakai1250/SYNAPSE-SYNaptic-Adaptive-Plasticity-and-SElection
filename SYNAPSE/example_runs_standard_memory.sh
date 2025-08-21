@@ -104,7 +104,7 @@ do
     --context_layers 0 1 2 3 4 5 6 7 8 9 10 11 \
     --context_learner "LogisticRegression(random_state=0, max_iter=20, C=0.005)" \
     --dataset "CIFAR100" \
-    --number_of_tasks "5" \
+    --number_of_tasks "10" \
     --model "VGG11_SLIM" \
     --seed "${SEED}" \
     --learning_rate "0.005" \

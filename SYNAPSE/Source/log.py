@@ -204,7 +204,7 @@ def write_units(writer, network: Any):
         weights = network.get_weight_bias_masks_numpy()
         all_units = [list(range(weights[0][0].shape[1]))] + [list(range(w[1].shape[0])) for w in weights]
     writer.writerow(["All Units"] + [len(u) for u in all_units])
-    writer.writerow(["Immature Neurons"] + [sum(1 for state in u if not state) for u in network.unit_ranks])
-    writer.writerow(["Transitional Neurons"] + [sum(1 for state in u if len(state) == 1) for u in network.unit_ranks])
-    writer.writerow(["Mature Neurons"] + [sum(1 for state in u if len(state) == 1) for u in network.unit_ranks]) 
+    writer.writerow(["Immature Neurons"] + [sum(1 for state in ranks if not state) for ranks, name in network.unit_ranks])
+    writer.writerow(["Transitional Neurons"] + [sum(1 for state in ranks if len(state) == 1) for ranks, name in network.unit_ranks])
+    writer.writerow(["Mature Neurons"] + [sum(1 for state in ranks if len(state) > 1) for ranks, name in network.unit_ranks])
     return writer
