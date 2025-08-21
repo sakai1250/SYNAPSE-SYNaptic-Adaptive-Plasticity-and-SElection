@@ -299,14 +299,28 @@ class VGG11_SLIM(CNN_Simple):
         self.freeze_masks = []
         
         # === 新しい形式で unit_ranks を正しく初期化 ===
-        unit_ranks_list = [([], "input")]
-        # モデルの実際の層をイテレートしてunit_ranksを構築
-        for m in self.modules():
-            if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput)):
-                num_units = m.weight.data.shape[0]
-                unit_ranks_list.append( ([[] for _ in range(num_units)], m.layer_name) )
-        self.unit_ranks = unit_ranks_list
+        #unit_ranks_list = [([], "input")]
+        # # モデルの実際の層をイテレートしてunit_ranksを構築
+        # for m in self.modules():
+        #     if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput)):
+        #         num_units = m.weight.data.shape[0]
+        #         unit_ranks_list.append( ([[] for _ in range(num_units)], m.layer_name) )
+        # self.unit_ranks = unit_ranks_list
+        
+        layer_output_sizes = []
+        # self.modules() を使ってモデル内の全レイヤーを探索
+        for module in self.modules():
+            # あなたのカスタムレイヤーと出力層を正しく判定
+            if isinstance(module, (SparseConv2d, SparseLinear, SparseOutput)):
+                # レイヤーの重みテンソルの形状から出力ユニット数を取得
+                num_units = module.weight.shape[0]
+                layer_output_sizes.append(num_units)
 
+        # 全てのニューロンを「未熟」状態（空のリスト）で初期化
+        self.unit_ranks = [
+            [[] for _ in range(size)] for size in layer_output_sizes
+        ]
+        print(f"[DEBUG] VGG11_SLIM initialized. unit_ranks length: {len(self.unit_ranks)}")
 
 class CNN_MNIST(CNN_Simple):
     def __init__(self, args: Namespace, input_size: int, output_size: int) -> None:

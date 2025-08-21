@@ -15,14 +15,14 @@ from Source.resnet18 import ResNet18
 def get_current_young_neurons(unit_ranks: List) -> List:
     """未熟ニューロン（タスクリストが空）のインデックスを取得する"""
     current_young_neurons = [[idx for idx, rank in enumerate(ranks) if not rank]
-                             for ranks, _ in unit_ranks]
+                              for ranks in unit_ranks]
     return current_young_neurons
 
 
 def get_current_learner_neurons(unit_ranks: List, current_task_id: int) -> List:
     """現在のタスクの学習者ニューロンのインデックスを取得する"""
     current_learner_neurons = [[idx for idx, rank in enumerate(ranks) if rank == [current_task_id]]
-                               for ranks, _ in unit_ranks]
+                               for ranks in unit_ranks]
     return current_learner_neurons
 
 
@@ -134,16 +134,16 @@ def select_learner_units(network: Any, stable_selection_perc, train_episode: Any
 
     # ランクを更新
     unit_ranks = [network.unit_ranks[0]]
-    for i, (ranks, name) in enumerate(network.unit_ranks[1:], 1):
+    for i, ranks in enumerate(network.unit_ranks[1:], 1):
         if i - 1 < len(top_unit_indices):
             new_ranks = copy.deepcopy(ranks)
             selected_for_layer = top_unit_indices[i - 1]
             for unit_idx in selected_for_layer:
                 if not new_ranks[unit_idx]: # 未熟の場合のみ
                     new_ranks[unit_idx] = [episode_index]
-            unit_ranks.append((new_ranks, name))
+            unit_ranks.append((new_ranks))
         else:
-            unit_ranks.append((ranks, name))
+            unit_ranks.append((ranks))
     
     network.unit_ranks = unit_ranks
     return network

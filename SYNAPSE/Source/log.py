@@ -146,12 +146,17 @@ def log_end_of_episode(args: Namespace, network: Any, context_detector: Any, sce
             log_metrics[f'acc/cil_test_task_{i}'] = test_acc
 
         # ニューロンの状態
-        total_neurons = sum([len(u) for u, _ in network.unit_ranks[1:]])
-        immature_count = sum([len((u == 0).nonzero()[0]) for u, _ in network.unit_ranks[1:]])
-        learner_count = sum([len((u == 1).nonzero()[0]) for u, _ in network.unit_ranks[1:]])
-        mature_count = sum([len((u > 1).nonzero()[0]) for u, _ in network.unit_ranks[1:]])
-        immature_ratio = immature_count / total_neurons if total_neurons > 0 else 0
-        
+        # network.unit_ranksから最初の層（入力層など）を除外して計算
+        relevant_layers = network.unit_ranks[1:]
+
+        # 各状態のニューロン数を新しい仕様でカウント
+        immature_count = sum(1 for layer in relevant_layers for state in layer if len(state) == 0)
+        learner_count = sum(1 for layer in relevant_layers for state in layer if len(state) == 1) # 学習者/成熟済みをカウント
+        mature_count = 0 # もし学習者と成熟済みを区別しないなら、この行は不要か、0に設定
+        shared_count = sum(1 for layer in relevant_layers for state in layer if len(state) > 1) # 共有ニューロンをカウント
+
+        # ニューロンの総数を計算
+        total_count = sum(len(layer) for layer in relevant_layers)
         log_metrics.update({
             "neurons/immature_ratio": immature_ratio,
             "neurons/immature_count": immature_count,
@@ -198,10 +203,7 @@ def write_units(writer, network: Any):
         weights = network.get_weight_bias_masks_numpy()
         all_units = [list(range(weights[0][0].shape[1]))] + [list(range(w[1].shape[0])) for w in weights]
     writer.writerow(["All Units"] + [len(u) for u in all_units])
-    writer.writerow(["Immature Neurons"] + [len((u == 0).nonzero()[0])
-                    for u, _ in network.unit_ranks])
-    writer.writerow(["Transitional Neurons"] + [len((u == 1).nonzero()[0])
-                    for u, _ in network.unit_ranks])
-    writer.writerow(["Mature Neurons"] + [len((u > 1).nonzero()[0])
-                    for u, _ in network.unit_ranks])
+    writer.writerow(["Immature Neurons"] + [sum(1 for state in u if not state) for u in network.unit_ranks])
+    writer.writerow(["Transitional Neurons"] + [sum(1 for state in u if len(state) == 1) for u in network.unit_ranks])
+    writer.writerow(["Mature Neurons"] + [sum(1 for state in u if len(state) == 1) for u in network.unit_ranks]) 
     return writer

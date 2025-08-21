@@ -115,17 +115,16 @@ class ContextDetector():
                 context_layer_activations = [(index, layer_activations[index])
                                              for index in self.args.context_layers]
                 if len(is_conv) != len(context_layer_activations):
-                    raise Exception("We did not tested using layers partially for context")
+                    raise Exceptrain_episodetion("We did not tested using layers partially for context")
 
                 quantized_activations = []
                 context_masks = []
-                for index, activation in context_layer_activations:
+                for index, (activation, ranks_for_layer) in enumerate(zip(layer_activations, network.unit_ranks)):
                     activation = activation.detach().cpu()
-                    # context_detector.py の push_activations 関数内
-                    # ニューロンのランク（タスクIDのリスト）が空でないか(bool(r)で判定)をチェックする
-                    ranks_for_layer = network.unit_ranks[index][0]
+
                     mask = np.array([bool(r) for r in ranks_for_layer])
                     context_masks.append((mask, index))
+
                     quantized_activations.append(self.layer_binarizers[index].quantize(activation))
 
                 episodes_float_context_representations.append((context_layer_activations, class_, is_conv))
