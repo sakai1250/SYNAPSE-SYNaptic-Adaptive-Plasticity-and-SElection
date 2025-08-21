@@ -6,7 +6,7 @@ from pathlib import Path
 
 # ===== 設定 =====
 BASE_DIR = Path("/media/blackie/8000GB_blackie/SYNAPSE-SYNaptic-Adaptive-Plasticity-and-SElection/NICE/Logs")
-KEEP_LATEST = 0   # 最新ログフォルダをいくつ残すか
+KEEP_LATEST = 1   # 最新ログフォルダをいくつ残すか
 DRY_RUN = False   # True で移動せず確認だけ
 
 BIN_TINY  = "TinyImageNet"

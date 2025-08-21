@@ -1,7 +1,7 @@
-
 # SYNAPSE/Source/synapse_operations.py
 
 import torch
+import torch.nn as nn
 import numpy as np
 from itertools import combinations, product
 from typing import Any, Dict, List
@@ -9,12 +9,11 @@ import copy
 
 from argparse import Namespace
 from avalanche.benchmarks import TCLExperience
-from Source.helper import get_device, reduce_or_flat_convs
+from Source.helper import get_device, reduce_or_flat_convs, SparseConv2d, SparseLinear, SparseOutput
 from Source.context_detector import get_n_samples_per_class
 
 
 # --- CKAの実装 ---
-# この関数は新たに追加します
 def centered_kernel_alignment(X, Y):
     """
     2つの活性化行列間の線形CKAを計算する。
@@ -24,25 +23,55 @@ def centered_kernel_alignment(X, Y):
     Returns:
         float: CKAスコア
     """
-    # グラム行列を計算する前に平均を引く
     X = X - X.mean(dim=0, keepdim=True)
     Y = Y - Y.mean(dim=0, keepdim=True)
 
-    # グラム行列 (K = X @ X.T, L = Y @ Y.T)
-    # HSIC(K, L) = tr(KHLH) / ((tr(KHK))^1/2 * (tr(LHL))^1/2) とほぼ等価
-    # Hはセンタリング行列だが、既に行ったので不要
-
     XTX = X.T @ X
     YTY = Y.T @ Y
-    
-    # 分子: HSIC(X, Y)
+
     numerator = torch.norm(Y.T @ X, p='fro')**2
-    
-    # 分母: sqrt(HSIC(X, X) * HSIC(Y, Y))
     denominator = torch.norm(XTX, p='fro') * torch.norm(YTY, p='fro')
-    
+
     return (numerator / denominator).item() if denominator > 0 else 0.0
 
+# =================================================================
+# === 重み再初期化のためのヘルパー関数 ===
+# =================================================================
+def reinitialize_neurons(model: Any, layer_idx: int, neuron_indices: List[int]):
+    """
+    指定された層の特定のニューロンの重みとバイアスを再初期化する。
+    """
+    if not neuron_indices:
+        return
+
+    # モデル内の全モジュールをリスト化
+    all_modules = [m for m in model.modules() if isinstance(m, (SparseConv2d, SparseLinear, SparseOutput))]
+    
+    # layer_idxはunit_ranksに対応しているため、学習可能モジュールのインデックスに変換
+    # unit_ranksの先頭は入力層なので-1する
+    target_module_idx = layer_idx - 1
+    if target_module_idx < 0 or target_module_idx >= len(all_modules):
+        return
+
+    target_module = all_modules[target_module_idx]
+    
+    # torch.no_grad()コンテキストで重みを変更
+    with torch.no_grad():
+        # 出力側の重みを初期化 (kaiming_normal_はReLUに適している)
+        #重み形状: (out_channels, in_channels, k, k) or (out_features, in_features)
+        nn.init.kaiming_normal_(target_module.weight.data[neuron_indices, :], mode='fan_out', nonlinearity='relu')
+        
+        # バイアスを0で初期化
+        if target_module.bias is not None:
+            nn.init.constant_(target_module.bias.data[neuron_indices], 0.0)
+
+        # 入力側の重みも初期化 (次の層の視点から)
+        if target_module_idx + 1 < len(all_modules):
+            next_module = all_modules[target_module_idx + 1]
+            # 次の層の重み形状: (next_out, out_channels)
+            # 転置してfan_inモードで初期化するのが一般的
+            if next_module.weight.dim() > 1:
+                 nn.init.kaiming_normal_(next_module.weight.data[:, neuron_indices], mode='fan_in', nonlinearity='relu')
 
 # --- メイン関数 ---
 def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace, episode_index: int, train_episode: TCLExperience) -> dict:
@@ -55,7 +84,6 @@ def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace,
     # 1. 可塑性のチェック (トリガー)
     total_neurons = 0
     immature_neurons = 0
-    # ### 修正箇所 1: unit_ranks のタプルを正しく展開 ###
     for ranks, _ in model.unit_ranks[1:-1]: # 入力層と出力層を除く
         total_neurons += len(ranks)
         immature_neurons += sum(1 for r in ranks if not r)
@@ -90,23 +118,27 @@ def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace,
 
     # 3. 全候補の類似度を計算 & 優先順位付け
     candidate_pairs = []
-    # ### 修正箇所 2: unit_ranks のタプルを正しく展開 ###
     for layer_idx, (ranks, layer_name) in enumerate(model.unit_ranks):
         if not any(ranks) or layer_idx not in activations_for_cka: continue
 
         cohorts = {}
+        target_tasks = {episode_index}
+        if episode_index > 1:
+            target_tasks.add(episode_index - 1)
+
         for neuron_idx, task_list in enumerate(ranks):
-            if task_list and task_list != [episode_index]:
-                for task_id in task_list:
-                    if task_id not in cohorts: cohorts[task_id] = []
+            if not task_list: continue
+            relevant_tasks = set(task_list) & target_tasks
+            for task_id in relevant_tasks:
+                if task_id not in cohorts: cohorts[task_id] = []
+                if neuron_idx not in cohorts[task_id]:
                     cohorts[task_id].append(neuron_idx)
+        cohorts = {k: v for k, v in cohorts.items() if v}
 
         if len(cohorts) < 1 : continue
-
         activation_tensor = activations_for_cka.get(layer_idx)
         if activation_tensor is None: continue
 
-        # 活性化テンソルをCKA計算用に整形
         if activation_tensor.dim() == 4:
             act_reshaped = activation_tensor.permute(0, 2, 3, 1).reshape(-1, activation_tensor.shape[1])
         else:
@@ -142,23 +174,24 @@ def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace,
 
     # 4 & 5. トップダウンで逐次リサイクル
     recycled_neurons_this_phase = set()
+    neurons_to_reinit = {} # {layer_idx: [neuron_idx, ...]}
+
     for pair in candidate_pairs:
-        # ### 修正箇所 3: unit_ranks のタプルを正しく展開 ###
         ranks, _ = model.unit_ranks[pair['layer_idx']]
         immature_count = sum(1 for r in ranks if not r)
         total_in_layer = len(ranks)
         current_layer_immature_ratio = immature_count / total_in_layer
 
-        if current_layer_immature_ratio >= args.target_immature_pool_ratio:
-            continue
-
-        if any((pair['layer_idx'], n) in recycled_neurons_this_phase for n in pair['neurons']):
-            continue
+        if current_layer_immature_ratio >= args.target_immature_pool_ratio: continue
+        if any((pair['layer_idx'], n) in recycled_neurons_this_phase for n in pair['neurons']): continue
 
         if pair['type'] == 'pruning':
             target_neuron_idx = pair['neurons'][1]
             model.unit_ranks[pair['layer_idx']][0][target_neuron_idx] = []
             recycled_neurons_this_phase.add((pair['layer_idx'], target_neuron_idx))
+            if pair['layer_idx'] not in neurons_to_reinit:
+                neurons_to_reinit[pair['layer_idx']] = []
+            neurons_to_reinit[pair['layer_idx']].append(target_neuron_idx)
             synapse_metrics['synapse/pruned_count'] += 1
             print(f"  [Pruning] Layer {pair['layer_idx']}, Neuron {target_neuron_idx} recycled. (Similarity: {pair['similarity']:.4f})")
             
@@ -179,8 +212,18 @@ def run_synapse_optimization(model: Any, context_detector: Any, args: Namespace,
 
             model.unit_ranks[pair['layer_idx']][0][source_idx] = []
             recycled_neurons_this_phase.add((pair['layer_idx'], source_idx))
+            if pair['layer_idx'] not in neurons_to_reinit:
+                neurons_to_reinit[pair['layer_idx']] = []
+            neurons_to_reinit[pair['layer_idx']].append(source_idx)
             synapse_metrics['synapse/shared_count'] += 1
             print(f"  [Sharing] Layer {pair['layer_idx']}, Neuron {source_idx} merged into {target_idx} and recycled. (Similarity: {pair['similarity']:.4f})")
+
+    # 6. リサイクル対象のニューロンの重みを一括で再初期化
+    if neurons_to_reinit:
+        print("  Reinitializing recycled neurons...")
+        for layer_idx, neuron_indices in neurons_to_reinit.items():
+            reinitialize_neurons(model, layer_idx, list(set(neuron_indices)))
+            print(f"    Layer {layer_idx}: Reinitialized {len(set(neuron_indices))} neurons.")
 
     print("\n--- SYNAPSE Phase finished. ---\n")
     return synapse_metrics

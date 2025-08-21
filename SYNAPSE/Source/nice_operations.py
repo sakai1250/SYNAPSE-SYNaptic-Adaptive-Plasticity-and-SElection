@@ -12,324 +12,10 @@ from Source.helper import get_device
 from Source.resnet18 import ResNet18
 
 
-# def get_current_young_neurons(unit_ranks: List) -> List:
-#     """未熟ニューロン（タスクリストが空）のインデックスを取得する"""
-#     current_young_neurons = [[idx for idx, rank in enumerate(ranks) if not rank]
-#                               for ranks in unit_ranks]
-#     return current_young_neurons
-
-
-# def get_current_learner_neurons(unit_ranks: List, current_task_id: int) -> List:
-#     """現在のタスクの学習者ニューロンのインデックスを取得する"""
-#     current_learner_neurons = [[idx for idx, rank in enumerate(ranks) if rank == [current_task_id]]
-#                                for ranks in unit_ranks]
-#     return current_learner_neurons
-
-
-# def increase_unit_ranks(network: Any) -> Any:
-#     """
-#     タスク完了後、学習者ニューロンを成熟済みにする。
-#     リスト表現では明示的なランクのインクリメントは不要なため、何もしない。
-#     """
-#     return network
-
-
-# def update_freeze_masks(network: Any) -> Any:
-#     if isinstance(network, ResNet18):
-#         # (ResNetの場合はここを実装)
-#         return network
-
-#     weights = network.get_weight_bias_masks_numpy()
-#     freeze_masks = []
-    
-#     # network.unit_ranksから直接、成熟ニューロンのインデックスリストを作成
-#     mature_neurons_per_layer = []
-#     for ranks in network.unit_ranks:
-#         mature_indices = [idx for idx, r in enumerate(ranks) if r] # rが空リストでなければTrue (成熟)
-#         mature_neurons_per_layer.append(np.array(mature_indices, dtype=np.int32))
-
-#     # 層の数（重みの数とランクの数）が一致していることを確認 (念のため)
-#     if len(weights) != len(mature_neurons_per_layer):
-#         print(f"[WARNING] Layer count mismatch in update_freeze_masks. Weights: {len(weights)}, Ranks: {len(mature_neurons_per_layer)}")
-#         return network # エラーを防ぐために処理を中断
-
-#     # zipを使い、各層の「重み」と「成熟ニューロンリスト」を正しくペアリングしてループ
-#     for weight_pair, target_mature in zip(weights, mature_neurons_per_layer):
-        
-#         mask_w = np.zeros(weight_pair[0].shape)
-#         mask_b = np.zeros(weight_pair[1].shape)
-
-#         if len(target_mature) > 0:
-#             # これでインデックスと層のサイズが一致するため、エラーは発生しない
-#             mask_w[target_mature, :] = 1
-#             mask_b[target_mature] = 1
-        
-#         # 既存の接続マスクと凍結マスクを結合
-#         freeze_masks.append((mask_w * weight_pair[0], mask_b))
-
-#     freeze_masks_tensors = [(torch.tensor(w, dtype=torch.bool).to(get_device()),
-#                              torch.tensor(b, dtype=torch.bool).to(get_device()))
-#                             for w, b in freeze_masks]
-#     network.freeze_masks = freeze_masks_tensors
-#     return network
-
-
-# def pick_top_neurons(scores, selection_ratio) -> List[int]:
-#     """活性化スコア上位のニューロンを選択するヘルパー関数"""
-#     if torch.sum(scores) == 0:
-#         return []
-#     total = torch.sum(scores)
-#     accumulate = 0
-#     indices = []
-#     sort_indices = torch.argsort(-scores)
-#     for index in sort_indices:
-#         index_val = index.item()
-#         accumulate += scores[index_val]
-#         indices.append(index_val)
-#         if accumulate >= total * selection_ratio / 100.0:
-#             break
-#     return indices
-
-
-# # SYNAPSE/Source/nice_operations.py
-
-# def select_learner_units(network: Any, stable_selection_perc, train_episode: Any, episode_index: int) -> Any:
-#     if isinstance(network, ResNet18):
-#         return select_learner_units_resnet(network, stable_selection_perc, train_episode, episode_index)
-
-#     top_unit_indices = []
-    
-#     # 最新の未熟/学習者ニューロンの状態を取得 (unit_ranksの長さに対応)
-#     current_young = get_current_young_neurons(network.unit_ranks)
-#     current_learners = get_current_learner_neurons(network.unit_ranks, episode_index)
-    
-#     if stable_selection_perc == 100.0:
-#         # --- フェーズ1 ---
-#         # 全ての学習可能層（出力層を除く）に対して、利用可能な全ニューロンを選択
-#         for i in range(len(network.unit_ranks) - 1):
-#             selectable = sorted(list(set(current_young[i] + current_learners[i])))
-#             top_unit_indices.append(selectable)
-#     else:
-#         # --- フェーズ2以降 ---
-#         loader = DataLoader(train_episode.dataset, batch_size=1024,  shuffle=False)
-#         data, _, _ = next(iter(loader))
-#         data = data.to(get_device())
-        
-#         # network.get_activations()は[入力, 層1, 層2, ..., 出力]のリストを返す
-#         _, layer_activations = network.get_activations(data, return_output=True)
-        
-#         # 活性化リスト(層1〜最後から2番目まで)とunit_ranks(層1〜最後から2番目まで)をzipで安全にループ
-#         # これでリスト間のズレが完全になくなる
-#         for act, ranks, learners in zip(layer_activations[1:-1], network.unit_ranks[:-1], current_learners[:-1]):
-#             if act.dim() > 2: # Conv層
-#                 scores = torch.sum(act, dim=(0, 2, 3))
-#             else: # Linear層
-#                 scores = torch.sum(act, dim=0)
-            
-#             # 既に何らかのタスクを担当しているニューロンはスコアを0にし、選択対象から除外
-#             mask = torch.zeros_like(scores, dtype=torch.bool)
-#             non_selectable = [i for i, r in enumerate(ranks) if r]
-#             if non_selectable:
-#                 mask[non_selectable] = True
-#             scores[mask] = 0.0
-            
-#             selected = pick_top_neurons(scores, stable_selection_perc)
-#             # 既存の学習者も選択状態に維持する
-#             final_selection = sorted(list(set(selected + learners)))
-#             top_unit_indices.append(final_selection)
-
-#     # --- 出力層の処理 ---
-#     # 現在のタスクで必要なクラスと、既存の学習者を結合して選択
-#     output_layer_units = sorted(list(set(train_episode.classes_in_this_experience + current_learners[-1])))
-#     top_unit_indices.append(output_layer_units)
-
-#     # --- ランクの更新 ---
-#     # unit_ranks (11要素) と top_unit_indices (11要素) が完全に一致しているため、安全に更新できる
-#     new_unit_ranks = []
-#     for ranks, selected_for_layer in zip(network.unit_ranks, top_unit_indices):
-#         new_ranks = copy.deepcopy(ranks)
-#         for unit_idx in selected_for_layer:
-#             if unit_idx < len(new_ranks):
-#                 if not new_ranks[unit_idx]: # 未熟ニューロン([])の場合のみ、現在のタスクIDを追加
-#                     new_ranks[unit_idx] = [episode_index]
-#         new_unit_ranks.append(new_ranks)
-    
-#     network.unit_ranks = new_unit_ranks
-#     return network
-
-# # ResNet用の関数も、エラーを起こした部分を修正
-# def select_learner_units_resnet(network: Any, stable_selection_perc, train_episode: Any, episode_index: int) -> Any:
-#     top_unit_indices = []
-    
-#     if stable_selection_perc == 100.0:
-#         for ranks, _ in network.unit_ranks[1:-1]:
-#             selectable_indices = [idx for idx, r in enumerate(ranks) if not r or r == [episode_index]]
-#             top_unit_indices.append(np.array(selectable_indices))
-#     else:
-#         # (活性化に基づく選択ロジック)
-#         pass
-
-#     top_unit_indices.append(train_episode.classes_in_this_experience)
-    
-#     unit_ranks = [network.unit_ranks[0]]
-#     for i, (ranks, name) in enumerate(network.unit_ranks[1:], 1):
-#         if i - 1 < len(top_unit_indices):
-#             layer_selected_units = top_unit_indices[i - 1]
-#             new_ranks = copy.deepcopy(ranks)
-#             for unit_idx in layer_selected_units:
-#                 if unit_idx < len(new_ranks) and not new_ranks[unit_idx]:
-#                     new_ranks[unit_idx] = [episode_index]
-#             unit_ranks.append((new_ranks, name))
-#         else:
-#             unit_ranks.append((ranks, name))
-            
-#     network.unit_ranks = unit_ranks
-#     return network
-
-
-# def grow_all_to_young(network: Any) -> Any:
-#     """
-#     次の層の未熟ニューロンへの接続をすべて有効化（成長）させる。
-#     """
-#     if isinstance(network, ResNet18):
-#         # TODO: ResNet用のロジックを実装
-#         print("  [INFO] grow_all_to_young for ResNet is not yet implemented.")
-#         return network
-
-#     # 現在の未熟ニューロンのインデックスを取得
-#     all_young_indices = get_current_young_neurons(network.unit_ranks)
-    
-#     module_list = [m for m in network.modules() if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput))]
-
-#     # 各層をループして接続マスクを更新
-#     for i, module in enumerate(module_list):
-#         # 次の層の未熟ニューロンのインデックスを取得
-#         # 注意: all_young_indicesはunit_ranksに対応し、unit_ranksは学習可能層のみ。
-#         # iが最後の層を指す場合、次の層はないのでスキップ
-#         if i + 1 >= len(all_young_indices):
-#             continue
-            
-#         next_layer_young_idx = all_young_indices[i + 1]
-#         if not next_layer_young_idx:
-#             continue # 次に未熟ニューロンがなければ何もしない
-
-#         weight_mask, bias_mask = module.get_mask()
-        
-#         # 次の層の未熟ニューロンに対応する行のマスクをすべて1にする
-#         weight_mask[next_layer_young_idx, :] = 1
-        
-#         # 対応するバイアスマスクも有効化
-#         bias_mask[next_layer_young_idx] = 1
-
-#         module.set_mask(weight_mask, bias_mask)
-
-#     return network
-
-# # SYNAPSE/Source/nice_operations.py
-
-
-# def grow_all_to_young(network: Any) -> Any:
-#     """
-#     次の層の未熟ニューロンへの接続をすべて有効化（成長）させる。
-#     """
-#     if isinstance(network, ResNet18):
-#         print("  [INFO] grow_all_to_young for ResNet is not yet implemented.")
-#         return network
-
-#     all_young_indices = get_current_young_neurons(network.unit_ranks)
-#     module_list = [m for m in network.modules() if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput))]
-
-#     for i, module in enumerate(module_list):
-#         if i + 1 >= len(all_young_indices):
-#             continue
-            
-#         next_layer_young_idx = all_young_indices[i + 1]
-#         if not next_layer_young_idx:
-#             continue
-
-#         weight_mask, bias_mask = module.get_mask()
-#         input(f'next_layer_young_idx: {next_layer_young_idx}')
-#         # Linear層(2D)とConv層(4D)で処理を分岐
-#         if weight_mask.dim() == 4: # Conv層の場合
-#             # 対応する出力チャンネルの全フィルターを有効化
-#             weight_mask[next_layer_young_idx, :, :, :] = 1
-#         else: # Linear層の場合
-#             weight_mask[next_layer_young_idx, :] = 1
-
-
-
-#         bias_mask[next_layer_young_idx] = 1
-#         module.set_mask(weight_mask, bias_mask)
-
-#     return network
-
-# def drop_young_to_learner(network: Any) -> Any:
-#     """
-#     現在の層の未熟ニューロンから、次の層の成熟済みニューロンへの接続を削除する。
-#     """
-#     if isinstance(network, ResNet18):
-#         print("  [INFO] drop_young_to_learner for ResNet is not yet implemented.")
-#         return network
-
-#     all_young_indices = get_current_young_neurons(network.unit_ranks)
-    
-#     mature_neurons_per_layer = []
-#     for ranks in network.unit_ranks:
-#         mature_indices = [idx for idx, r in enumerate(ranks) if r]
-#         mature_neurons_per_layer.append(mature_indices)
-
-#     module_list = [m for m in network.modules() if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput))]
-
-#     for i, module in enumerate(module_list):
-#         current_layer_young_idx = all_young_indices[i]
-        
-#         if i + 1 >= len(mature_neurons_per_layer):
-#             continue
-#         next_layer_mature_idx = mature_neurons_per_layer[i + 1]
-
-#         if not current_layer_young_idx or not next_layer_mature_idx:
-#             continue
-
-#         weight_mask, bias_mask = module.get_mask()
-
-#         # ★★★ 修正箇所 ★★★
-#         # np.ix_はNumPy配列用。PyTorchテンソルには直接使えないため、PyTorchのインデックス機能を使う
-#         rows = torch.tensor(next_layer_mature_idx, dtype=torch.long)
-#         cols = torch.tensor(current_layer_young_idx, dtype=torch.long)
-
-#         if weight_mask.dim() == 4: # Conv層の場合
-#              for r in rows:
-#                  for c in cols:
-#                      weight_mask[r, c, :, :] = 0
-#         else: # Linear層の場合
-#             # ブロードキャストを利用して効率的に選択
-#             weight_mask[rows.unsqueeze(1), cols] = 0
-
-#         module.set_mask(weight_mask, bias_mask)
-
-#     return network
-
-
-# SYNAPSE/Source/nice_operations.py
-
-import copy
-from typing import Any, List
-
-import numpy as np
-import torch
-from torch.utils.data import DataLoader
-
-from Source.architecture import SparseConv2d, SparseLinear, SparseOutput
-from Source.helper import get_device
-from Source.resnet18 import ResNet18
-
-
 def get_current_young_neurons(unit_ranks: List) -> List:
     """未熟ニューロン（タスクリストが空）のインデックスを取得する"""
-    # unit_ranksの各要素（層ごとのランクのリスト）をループ
     current_young_neurons = []
-    for ranks_in_layer in unit_ranks:
-        # ranks_in_layer は [['task1'], [], ['task2'], ...] のようなリスト
+    for ranks_in_layer, _ in unit_ranks:
         young_indices = [idx for idx, rank_list in enumerate(ranks_in_layer) if not rank_list]
         current_young_neurons.append(young_indices)
     return current_young_neurons
@@ -337,47 +23,42 @@ def get_current_young_neurons(unit_ranks: List) -> List:
 
 def get_current_learner_neurons(unit_ranks: List, current_task_id: int) -> List:
     """現在のタスクの学習者ニューロンのインデックスを取得する"""
-    current_learner_neurons = [[idx for idx, rank in enumerate(ranks) if rank == [current_task_id]]
-                               for ranks in unit_ranks]
+    current_learner_neurons = []
+    for ranks_in_layer, _ in unit_ranks:
+        learner_indices = [idx for idx, rank_list in enumerate(ranks_in_layer) if rank_list == [current_task_id]]
+        current_learner_neurons.append(learner_indices)
     return current_learner_neurons
 
 
 def increase_unit_ranks(network: Any) -> Any:
-    """
-    タスク完了後、学習者ニューロンを成熟済みにする。
-    リスト表現では明示的なランクのインクリメントは不要なため、何もしない。
-    """
+    """タスク完了後、学習者ニューロンを成熟済みにする（何もしない）"""
     return network
 
 
 def update_freeze_masks(network: Any) -> Any:
+    """成熟済みニューロンを凍結するためのマスクを更新する"""
     if isinstance(network, ResNet18):
-        # (ResNetの場合はここを実装)
         return network
 
     weights = network.get_weight_bias_masks_numpy()
     freeze_masks = []
     
-    # network.unit_ranksから直接、成熟ニューロンのインデックスリストを作成
-    mature_neurons_per_layer = []
-    # unit_ranksの各層ごとのランク情報（リストのリスト）をループ
-    for ranks_in_layer in network.unit_ranks:
-        # ランク情報（タスクIDのリスト）が空でなければ成熟とみなす
-        mature_indices = [idx for idx, r in enumerate(ranks_in_layer) if r] 
-        mature_neurons_per_layer.append(np.array(mature_indices, dtype=np.int32))
-
-    # 層の数（重みの数とランクの数）が一致していることを確認
-    if len(weights) != len(mature_neurons_per_layer):
-        print(f"[WARNING] Layer count mismatch in update_freeze_masks. Weights: {len(weights)}, Ranks: {len(mature_neurons_per_layer)}")
+    ranks_without_input = [ranks for ranks, name in network.unit_ranks[1:]]
+    
+    if len(weights) != len(ranks_without_input):
+        print(f"[WARNING] Layer count mismatch in update_freeze_masks. Weights: {len(weights)}, Ranks: {len(ranks_without_input)}")
         return network
 
-    for weight_pair, target_mature in zip(weights, mature_neurons_per_layer):
+    for i, ranks_in_layer in enumerate(ranks_without_input):
+        weight_pair = weights[i]
+        mature_indices = np.array([idx for idx, r in enumerate(ranks_in_layer) if r], dtype=np.int32)
+        
         mask_w = np.zeros(weight_pair[0].shape)
         mask_b = np.zeros(weight_pair[1].shape)
 
-        if len(target_mature) > 0:
-            mask_w[target_mature, :] = 1
-            mask_b[target_mature] = 1
+        if len(mature_indices) > 0:
+            mask_w[mature_indices, :] = 1
+            mask_b[mature_indices] = 1
         
         freeze_masks.append((mask_w * weight_pair[0], mask_b))
 
@@ -390,7 +71,7 @@ def update_freeze_masks(network: Any) -> Any:
 
 def pick_top_neurons(scores, selection_ratio) -> List[int]:
     """活性化スコア上位のニューロンを選択するヘルパー関数"""
-    if torch.sum(scores) == 0:
+    if torch.sum(scores).item() == 0:
         return []
     total = torch.sum(scores)
     accumulate = 0
@@ -398,6 +79,8 @@ def pick_top_neurons(scores, selection_ratio) -> List[int]:
     sort_indices = torch.argsort(-scores)
     for index in sort_indices:
         index_val = index.item()
+        if scores[index_val] == 0:
+            continue
         accumulate += scores[index_val]
         indices.append(index_val)
         if accumulate >= total * selection_ratio / 100.0:
@@ -405,123 +88,92 @@ def pick_top_neurons(scores, selection_ratio) -> List[int]:
     return indices
 
 
-def select_learner_units(network: Any, stable_selection_perc, train_episode: Any, episode_index: int) -> Any:
+def select_learner_units(network: Any, stable_selection_perc: float, train_episode: Any, episode_index: int) -> Any:
     if isinstance(network, ResNet18):
-        return select_learner_units_resnet(network, stable_selection_perc, train_episode, episode_index)
+        return network
 
     top_unit_indices = []
     
-    current_young = get_current_young_neurons(network.unit_ranks)
-    current_learners = get_current_learner_neurons(network.unit_ranks, episode_index)
+    intermediate_ranks = [ranks for ranks, name in network.unit_ranks[1:-1]]
     
     if stable_selection_perc == 100.0:
-        for i in range(len(network.unit_ranks) - 1):
-            selectable = sorted(list(set(current_young[i] + current_learners[i])))
-            top_unit_indices.append(selectable)
+        for ranks in intermediate_ranks:
+             selectable = [idx for idx, r in enumerate(ranks) if not r]
+             top_unit_indices.append(selectable)
     else:
-        loader = DataLoader(train_episode.dataset, batch_size=1024,  shuffle=False)
+        loader = DataLoader(train_episode.dataset, batch_size=1024, shuffle=False)
         data, _, _ = next(iter(loader))
         data = data.to(get_device())
         
         _, layer_activations = network.get_activations(data, return_output=True)
         
-        for act, ranks, learners in zip(layer_activations[1:-1], network.unit_ranks[:-1], current_learners[:-1]):
+        for act, ranks in zip(layer_activations[1:-1], intermediate_ranks):
             if act.dim() > 2:
                 scores = torch.sum(act, dim=(0, 2, 3))
             else:
                 scores = torch.sum(act, dim=0)
             
-            mask = torch.zeros_like(scores, dtype=torch.bool)
-            non_selectable = [i for i, r in enumerate(ranks) if r]
-            if non_selectable:
-                mask[non_selectable] = True
-            scores[mask] = 0.0
+            mature_indices = [idx for idx, r in enumerate(ranks) if r and r != [episode_index]]
+            if mature_indices:
+                scores[mature_indices] = 0.0
             
             selected = pick_top_neurons(scores, stable_selection_perc)
-            final_selection = sorted(list(set(selected + learners)))
+            current_learners = [idx for idx, r in enumerate(ranks) if r == [episode_index]]
+            final_selection = sorted(list(set(selected + current_learners)))
             top_unit_indices.append(final_selection)
+    
+    output_layer_ranks, _ = network.unit_ranks[-1]
+    output_learners = [idx for idx, r in enumerate(output_layer_ranks) if r == [episode_index]]
+    output_units = sorted(list(set(train_episode.classes_in_this_experience + output_learners)))
+    top_unit_indices.append(output_units)
 
-    output_layer_units = sorted(list(set(train_episode.classes_in_this_experience + current_learners[-1])))
-    top_unit_indices.append(output_layer_units)
-
-    new_unit_ranks = []
-    for ranks, selected_for_layer in zip(network.unit_ranks, top_unit_indices):
+    new_unit_ranks_list = network.unit_ranks[1:] 
+    for i, selected_for_layer in enumerate(top_unit_indices):
+        ranks, name = new_unit_ranks_list[i]
         new_ranks = copy.deepcopy(ranks)
         for unit_idx in selected_for_layer:
             if unit_idx < len(new_ranks):
                 if not new_ranks[unit_idx]:
                     new_ranks[unit_idx] = [episode_index]
-        new_unit_ranks.append(new_ranks)
+        new_unit_ranks_list[i] = (new_ranks, name)
     
-    network.unit_ranks = new_unit_ranks
+    network.unit_ranks = [network.unit_ranks[0]] + new_unit_ranks_list
     return network
-
-def select_learner_units_resnet(network: Any, stable_selection_perc, train_episode: Any, episode_index: int) -> Any:
-    # (この関数はResNet用のため、今回のエラー修正には直接関係しませんが、念のため構造を維持します)
-    # ... (既存のコード)
-    return network
-
-def _normalize_rows(idx, device):
-    # None, 空、0長対応
-    if idx is None:
-        return torch.empty(0, dtype=torch.long, device=device)
-
-    # list, numpy など
-    if not torch.is_tensor(idx):
-        idx = torch.as_tensor(idx, device=device)
-
-    # where/nonzero の tuple 想定
-    if isinstance(idx, tuple):
-        # 代表的には最初の要素が行インデックス
-        idx = idx[0]
-
-    # boolマスク対応
-    if idx.dtype == torch.bool:
-        idx = idx.nonzero(as_tuple=True)[0]
-
-    # 形を (R,) に統一
-    idx = idx.view(-1).to(dtype=torch.long, device=device)
-    return idx
 
 
 def grow_all_to_young(network: Any) -> Any:
     """
-    次の層の未熟ニューロンへの接続を全て有効化する。
-    先頭次元（出力ユニット）を rows で選び、index_fill_ で値 1 を流し込む。
+    次の層の未熟ニューロンへの接続をすべて有効化（成長）させる。
     """
     if isinstance(network, ResNet18):
-        print("  [INFO] grow_all_to_young for ResNet is not yet implemented.")
         return network
 
     all_young_indices = get_current_young_neurons(network.unit_ranks)
     module_list = [m for m in network.modules() if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput))]
 
     for i, module in enumerate(module_list):
-        # 次層の若いユニット集合を取る
-        if i + 1 >= len(all_young_indices):
+        # 次の層のインデックスは i+2 (入力層をunit_ranks[0]で考慮するため)
+        if i + 2 >= len(all_young_indices):
+            continue
+        next_layer_young_idx = all_young_indices[i + 2]
+        if not next_layer_young_idx:
             continue
 
-        next_layer_young_idx = all_young_indices[i + 1]
-
-        # マスクを取得
         weight_mask, bias_mask = module.get_mask()
         device = weight_mask.device
-
-        rows = _normalize_rows(next_layer_young_idx, device)
-        if rows.numel() == 0:
-            continue
-
-        # 先頭次元を rows で 1 に埋める
-        # Conv: (out_c, in_c, kH, kW)
-        # Linear/SparseOutput: (out_f, in_f)
-        weight_mask.index_fill_(0, rows, 1)
-
-        # bias は (out,) を想定
-        bias_mask.index_fill_(0, rows, 1)
-
-        # 念のための整合性チェック（開発中のみ有効化推奨）
-        # assert weight_mask.size(0) == bias_mask.numel(), \
-        #     f"out-dim mismatch: W[0]={weight_mask.size(0)} vs b={bias_mask.numel()}"
+        
+        # =================================================================
+        # === 曖昧なインデックス指定を index_fill_ に変更 ===
+        # =================================================================
+        rows_to_fill = torch.tensor(next_layer_young_idx, dtype=torch.long, device=device)
+        
+        # weight_maskの最初の次元（出力チャンネル/特徴）を指定して1で埋める
+        weight_mask.index_fill_(0, rows_to_fill, 1)
+        
+        # bias_maskも同様に更新
+        if bias_mask is not None:
+            bias_mask.index_fill_(0, rows_to_fill, 1)
+        # =================================================================
 
         module.set_mask(weight_mask, bias_mask)
 
@@ -533,43 +185,46 @@ def drop_young_to_learner(network: Any) -> Any:
     現在の層の未熟ニューロンから、次の層の成熟済みニューロンへの接続を削除する。
     """
     if isinstance(network, ResNet18):
-        print("  [INFO] drop_young_to_learner for ResNet is not yet implemented.")
         return network
 
     all_young_indices = get_current_young_neurons(network.unit_ranks)
     
     mature_neurons_per_layer = []
-    for ranks in network.unit_ranks:
-        # ランク情報(タスクIDのリスト)が空でなければ成熟とみなす
+    for ranks, _ in network.unit_ranks:
         mature_indices = [idx for idx, r in enumerate(ranks) if r]
         mature_neurons_per_layer.append(mature_indices)
 
     module_list = [m for m in network.modules() if isinstance(m, (SparseLinear, SparseConv2d, SparseOutput))]
 
     for i, module in enumerate(module_list):
-        current_layer_young_idx = all_young_indices[i]
+        # 現在の層は i+1
+        current_layer_young_idx = all_young_indices[i + 1]
         
-        if i + 1 >= len(mature_neurons_per_layer):
+        # 次の層は i+2
+        if i + 2 >= len(mature_neurons_per_layer):
             continue
-        next_layer_mature_idx = mature_neurons_per_layer[i + 1]
+        next_layer_mature_idx = mature_neurons_per_layer[i + 2]
 
         if not current_layer_young_idx or not next_layer_mature_idx:
             continue
 
-        weight_mask, bias_mask = module.get_mask()
+        weight_mask, _ = module.get_mask() # bias_maskは変更しないので不要
 
+        # =================================================================
+        # === 修正箇所: 2D/4Dテンソルに対応した、より安全なインデックス指定 ===
+        # =================================================================
         rows = torch.tensor(next_layer_mature_idx, dtype=torch.long)
         cols = torch.tensor(current_layer_young_idx, dtype=torch.long)
 
-        if weight_mask.dim() == 4: # Conv層の場合
-             # 出力チャンネル(rows)と入力チャンネル(cols)を指定してマスクを0にする
-             # torch.meshgridを使用してインデックスの組み合わせを生成
-             grid_r, grid_c = torch.meshgrid(rows, cols, indexing='ij')
-             weight_mask[grid_r, grid_c, :, :] = 0
-        else: # Linear層の場合
-            # ブロードキャストを利用して効率的に選択箇所を0にする
-            weight_mask[rows.unsqueeze(1), cols] = 0
-
-        module.set_mask(weight_mask, bias_mask)
+        # 選択された行(rows)の、特定の列(cols)だけを0にする
+        if weight_mask.dim() == 4: # Conv層: (out_c, in_c, kH, kW)
+             for r in rows:
+                 weight_mask[r, cols, :, :] = 0
+        else: # Linear層: (out_f, in_f)
+            for r in rows:
+                 weight_mask[r, cols] = 0
+        # =================================================================
+        # set_maskはループの外で行う方が効率的だが、可読性のためここで行う
+        # module.set_mask(weight_mask, bias_mask) # weight_maskしか変更していない
 
     return network
